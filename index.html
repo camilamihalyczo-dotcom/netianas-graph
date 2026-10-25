@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>N(H)ACER MUJER EN INTERNET · grafo</title>
+<meta name="description" content="Grafo rizomático de las netianas de Remedios Zafra: sin centro, sin orden correcto de lectura.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="scan"></div>
+
+<main id="lienzo" aria-label="Grafo de netianas"></main>
+
+<header id="hud">
+  <div class="hud-title">N(<span class="mag">H</span>)ACER MUJER EN INTERNET</div>
+  <div class="hud-hint">no existe un recorrido correcto · tocá cualquier netiana</div>
+  <button id="hud-toggle" class="act" aria-expanded="false" aria-controls="hud-opts">[ opciones ]</button>
+  <div id="hud-opts">
+
+  <div class="hud-row" role="group" aria-label="Agrupar por">
+    <span class="hud-lbl">agrupar_</span>
+    <div id="grupos" class="chips"></div>
+  </div>
+
+  <div class="hud-row" role="group" aria-label="Mostrar">
+    <span class="hud-lbl">mostrar_</span>
+    <div class="chips">
+      <button class="chip on" data-filtro="concepto"><i class="dot dot-concepto"></i>conceptos</button>
+      <button class="chip on" data-filtro="referente"><i class="dot dot-referente"></i>referentes</button>
+      <button class="chip on" data-filtro="categoria"><i class="dot dot-categoria"></i>categorías</button>
+    </div>
+  </div>
+
+  <div class="hud-row">
+    <button class="act" id="btn-todo">[ desplegar todo ]</button>
+    <button class="act" id="btn-reset">[ replegar ]</button>
+    <button class="act" id="btn-centrar">[ centrar ]</button>
+  </div>
+  </div>
+</header>
+
+<div id="contador" aria-live="polite"></div>
+
+<aside id="panel" aria-live="polite" hidden>
+  <div class="pn-head">
+    <span id="pn-path">netianas.net /</span>
+    <button id="pn-close" aria-label="Cerrar panel">✕</button>
+  </div>
+  <div id="pn-body"></div>
+  <div class="pn-foot">
+    <a href="https://netianas.vercel.app/form_sugerencias.html" target="_blank" rel="noopener">→ proponé tu netiana</a>
+    <a href="https://netianas.vercel.app" target="_blank" rel="noopener">versión texto ↗</a>
+  </div>
+</aside>
+
+<div id="tooltip" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script src="data.js"></script>
+<script src="grupos.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>
