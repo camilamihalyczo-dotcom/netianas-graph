@@ -619,11 +619,46 @@ function setup() {
   bindPointer(cnv.elt);
   bindUi();
   resetGraph();
+  // la obra empieza dormida: negro y un cursor. Al primer toque, se conecta
+  const conectar = () => {
+    if (conectado) return;
+    conectado = true;
+    document.body.classList.remove('dormida');
+    ultimoToque = millis();
+    nacer();
+  };
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, conectar, { passive: true }));
+}
+
+/* ── ENTRADA: conectarse como a internet en los 90 ── */
+let conectado = false;
+
+// la red nace mientras suena el módem: primero las netianas, de a una, después las palabras
+function nacer() {
+  resetGraph();
+  const orden = NODES.filter(grande).sort(() => Math.random() - .5);
+  orden.forEach((n, i) => n.born = frameCount + 70 + i * 7);
+  NODES.filter(n => n.inicial).forEach(n => n.born = frameCount + 190 + Math.floor(Math.random() * 150));
+  glitchear(30);
+}
+
+function drawDormida() {
+  background(COL.bg);
+  if (frameCount % 60 < 34) {
+    noStroke();
+    fill(COL.green);
+    drawingContext.shadowBlur = 12; drawingContext.shadowColor = COL.green;
+    textFont('VT323'); textAlign(CENTER, CENTER); textSize(46);
+    text('_', width / 2, height / 2);
+    drawingContext.shadowBlur = 0;
+  }
+  postGlitch();
 }
 
 function windowResized() { resizeCanvas(window.innerWidth, window.innerHeight); }
 
 function draw() {
+  if (!conectado) return drawDormida();
   step();
   updateCam();
   background(COL.bg);
@@ -776,6 +811,8 @@ function drawPalabra(n, fs) {
 function drawGlyph(n, fs) {
   if (n.type === 'palabra') return drawPalabra(n, fs);
   const age = frameCount - n.born;
+  if (age < 0) return;
+  if (age === 0) Sonido.dato(true);   // cada nodo que nace suena
   const dim = fs && !fs.has(n);
   const hid = hiddenCount(n);
   const lat = n.pulso || 0;
@@ -843,6 +880,7 @@ function drawGlyph(n, fs) {
 function drawLabel(n, fs) {
   if (n.type === 'palabra') return;
   const age = frameCount - n.born;
+  if (age < 0) return;
   const focused = fs && fs.has(n);
   const dim = fs && !focused;
   const show = grande(n) || focused || age < 90 ||
@@ -909,7 +947,7 @@ function nodeAt(sx, sy) {
   const w = toWorld(sx, sy);
   let best = null, bd = Infinity;
   NODES.forEach(n => {
-    if (!n.visible) return;
+    if (!n.visible || frameCount < n.born) return;
     const d = Math.hypot(n.x - w.x, n.y - w.y);
     const hit = Math.max(radius(n) * (grande(n) ? 3 : 2), 11 / cam.z);
     if (d < hit && d < bd) { best = n; bd = d; }

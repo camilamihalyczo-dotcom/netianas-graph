@@ -39,7 +39,7 @@ const Sonido = (() => {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
     ambiente();
-    modem(0.6);
+    modem(2.2);   // la conexión: mientras suena, la red nace
   }
 
   const ahora = () => ctx.currentTime;

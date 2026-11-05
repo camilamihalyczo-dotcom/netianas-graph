@@ -200,3 +200,7 @@ body::after {
   #panel.con-form { width: 100%; height: 85vh; }
   .p-form { height: calc(100% + 48px); margin-top: -48px; }
 }
+
+/* antes de conectarse: solo negro y el cursor del lienzo */
+body.dormida #hud { visibility: hidden; }
+body:not(.dormida) #hud { animation: fadein 1.2s ease 1.4s both; }
