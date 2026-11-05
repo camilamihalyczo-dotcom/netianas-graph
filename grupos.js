@@ -1,66 +1,39 @@
 /* ══════════════════════════════════════
-   AGRUPACIONES
-   Editá acá cómo se arman los grupos del grafo.
-   Un nodo puede estar en varios grupos a la vez:
-   las categorías se superponen, no se excluyen.
+   NODOS (agrupaciones)
+   No hay menú de agrupaciones: los grupos surgen navegando.
+   Al tocar una categoría (región, medio, tipo…) o un concepto,
+   sus elementos se juntan y se abre su NODO.
+   Editá acá los colores y qué entra en cada teoría.
 ══════════════════════════════════════ */
 
 const PALETA = ['#00ff41', '#ff00ff', '#00ffff', '#ffff00', '#ff6a00', '#b98bff', '#ff4f7b'];
 
-const GRUPOS = {
-  ninguna: { nombre: 'sin agrupar' },
-
-  region: {
-    nombre: 'región',
-    // tag del referente → nombre del grupo
-    tags: {
-      'latinoamericana': 'Latinoamérica',
-      'africana':        'África',
-      'asiática':        'Asia',
-      'europea':         'Europa',
-      'anglosajona':     'Anglosajona'
-    },
-    colores: {
-      'Latinoamérica': '#00ff41',
-      'África':        '#ffff00',
-      'Asia':          '#ff00ff',
-      'Europa':        '#00ffff',
-      'Anglosajona':   '#ff6a00'
-    }
+const CONSTELACIONES = {
+  // color del nodo de cada categoría (las que no estén acá usan blanco)
+  colores: {
+    'latinoamericana': '#00ff41',
+    'africana':        '#ffff00',
+    'asiática':        '#ff00ff',
+    'europea':         '#00ffff',
+    'anglosajona':     '#ff6a00',
+    'net.art':         '#00ff41',
+    'video':           '#00ffff',
+    'performance':     '#ff00ff',
+    'manifiesto':      '#ffff00',
+    'colectivo':       '#ff00ff',
+    'genealogía net.art': '#b98bff'
   },
 
-  tipo: {
-    nombre: 'tipo',
-    // 'colectivo' si tiene el tag (colectivo); si no, 'individual'
-    colores: { 'Colectivos': '#ff00ff', 'Individuales': '#00ffff' }
-  },
-
-  medio: {
-    nombre: 'medio',
-    tags: {
-      'net.art':     'net.art',
-      'video':       'video',
-      'performance': 'performance',
-      'manifiesto':  'manifiesto'
-    },
-    colores: { 'net.art': '#00ff41', 'video': '#00ffff', 'performance': '#ff00ff', 'manifiesto': '#ffff00' }
-  },
-
-  teoria: {
-    nombre: 'teoría',
-    // una netiana entra en la teoría si tiene el nombre como tag,
-    // o si su letra está en "netianas". Los conceptos listados también entran.
-    teorias: {
-      'Haraway':   { conceptos: ['Haraway', 'cyborg', 'posthumano', 'cuerpo-máquina'] },
-      'Butler':    { conceptos: ['Butler', 'performatividad', 'queer', 'desidentificación', 'teatralidad digital'] },
-      'Deleuze':   { conceptos: ['Deleuze', 'rizoma', 'líneas de fuga', 'multiplicidad', 'devenir-animal'] },
-      'Braidotti': { conceptos: ['posthumano', 'devenir'], netianas: ['N'] },
-      'Borges':    { conceptos: ['Borges', 'etcétera', 'metaficción'] },
-      'Kristeva':  { conceptos: ['Kristeva', 'jardín secreto'] }
-    },
-    colores: {
-      'Haraway': '#00ff41', 'Butler': '#ff00ff', 'Deleuze': '#00ffff',
-      'Braidotti': '#ffff00', 'Borges': '#ff6a00', 'Kristeva': '#b98bff'
-    }
+  // Al tocar el concepto con el nombre de la teoría (#Haraway, #Butler…)
+  // se abre un nodo más grande: las netianas que la tienen como tag,
+  // las letras de "netianas" y los conceptos listados.
+  // Braidotti no es un tag: su nodo aparece al tocar #posthumano o #devenir.
+  teorias: {
+    'Haraway':   { color: '#00ff41', conceptos: ['Haraway', 'cyborg', 'posthumano', 'cuerpo-máquina'] },
+    'Butler':    { color: '#ff00ff', conceptos: ['Butler', 'performatividad', 'queer', 'desidentificación', 'teatralidad digital'] },
+    'Deleuze':   { color: '#00ffff', conceptos: ['Deleuze', 'rizoma', 'líneas de fuga', 'multiplicidad', 'devenir-animal'] },
+    'Braidotti': { color: '#ffff00', conceptos: ['posthumano', 'devenir'], netianas: ['N'], disparadores: ['posthumano', 'devenir'] },
+    'Borges':    { color: '#ff6a00', conceptos: ['Borges', 'etcétera', 'metaficción'] },
+    'Kristeva':  { color: '#b98bff', conceptos: ['Kristeva', 'jardín secreto'] }
   }
 };

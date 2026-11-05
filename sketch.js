@@ -2,6 +2,7 @@
    N(H)ACER MUJER EN INTERNET · grafo rizomático
    p5.js + física propia. Sin centro, sin origen,
    sin un orden correcto de lectura.
+   Estética: JODI y VNS Matrix. Densidad de red: StarryNight (Rhizome, 1999).
 ══════════════════════════════════════ */
 
 const IMG_BASE = 'https://netianas.vercel.app/img/';
@@ -28,7 +29,8 @@ function addNode(id, type, props) {
   if (byId[id]) return byId[id];
   const n = Object.assign({
     id, type, x: 0, y: 0, vx: 0, vy: 0,
-    visible: false, born: -999, nbr: new Set(), grupos: []
+    visible: false, born: -999, nbr: new Set(),
+    seed: Math.random() * 1000, visitas: 0
   }, props);
   NODES.push(n);
   byId[id] = n;
@@ -38,8 +40,21 @@ function link(a, b) {
   const k = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id;
   if (edgeKeys.has(k)) return;
   edgeKeys.add(k);
-  EDGES.push({ a, b, seed: Math.random() * 1000 });
+  const e = { a, b, seed: Math.random() * 1000 };
+  EDGES.push(e);
+  edgeMap[k] = e;
   a.nbr.add(b); b.nbr.add(a);
+}
+const edgeMap = {};
+const LATERALES = [];
+const claveDe = (a, b) => a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id;
+// conexión lateral: no es jerárquica ni sirve para descubrir, solo une lo que se parece
+function lateral(a, b) {
+  const k = claveDe(a, b);
+  if (edgeMap[k]) return;
+  const e = { a, b, seed: Math.random() * 1000, lateral: true };
+  LATERALES.push(e);
+  edgeMap[k] = e;
 }
 const tagOf = s => { const m = s.match(/^\((.+)\)$/); return m ? m[1] : null; };
 
@@ -65,60 +80,105 @@ Object.entries(REFS).forEach(([ni, refs]) => {
 });
 
 NODES.forEach(n => n.deg = n.nbr.size);
+
+/* ── CONEXIONES LATERALES: más malla, menos árbol ── */
+(function tejerLaterales() {
+  const nets = NODES.filter(n => n.type === 'netiana');
+  // netianas que comparten 3 conceptos o más
+  for (let i = 0; i < nets.length; i++) for (let j = i + 1; j < nets.length; j++) {
+    const comun = nets[i].data.t.filter(t => nets[j].data.t.includes(t)).length;
+    if (comun >= 3) lateral(nets[i], nets[j]);
+  }
+  // cada referente con los dos que más categorías comparten
+  const refs = NODES.filter(n => n.type === 'referente');
+  refs.forEach(r => {
+    refs.filter(o => o !== r)
+      .map(o => ({ o, c: [...r.tags].filter(t => o.tags.has(t)).length + Math.random() * 0.5 }))
+      .sort((x, y) => y.c - x.c).slice(0, 2)
+      .forEach(({ o, c }) => { if (c >= 2) lateral(r, o); });
+  });
+  // conceptos que aparecen juntos en 3 netianas o más
+  const cons = NODES.filter(n => n.type === 'concepto');
+  for (let i = 0; i < cons.length; i++) for (let j = i + 1; j < cons.length; j++) {
+    const juntos = nets.filter(n => n.data.t.includes(cons[i].label) && n.data.t.includes(cons[j].label)).length;
+    if (juntos >= 3) lateral(cons[i], cons[j]);
+  }
+})();
+
+/* ── LÍNEAS COMO RAÍCES ── */
+// cada conexión es una curva en S que ondula despacio; los puntos se calculan siempre desde a hacia b
+function curva(e) {
+  const ax = e.a.x, ay = e.a.y, bx = e.b.x, by = e.b.y;
+  const dx = bx - ax, dy = by - ay;
+  const d = Math.hypot(dx, dy) || 1;
+  const nx = -dy / d, ny = dx / d;
+  const t = frameCount * 0.004;
+  const amp = d * (e.lateral ? 0.42 : 0.32);
+  const o1 = (noise(e.seed, t) - 0.5) * 2 * amp;
+  const o2 = (noise(e.seed + 77, t) - 0.5) * 2 * amp;
+  return [ax, ay, ax + dx / 3 + nx * o1, ay + dy / 3 + ny * o1, ax + dx * 2 / 3 + nx * o2, ay + dy * 2 / 3 + ny * o2, bx, by];
+}
+function puntoCurva(c, t) {
+  return [bezierPoint(c[0], c[2], c[4], c[6], t), bezierPoint(c[1], c[3], c[5], c[7], t)];
+}
+// crecimiento: la conexión brota desde el nodo que ya estaba
+function crecimiento(e) {
+  const nace = Math.max(e.a.born, e.b.born);
+  return easeOut(Math.min(1, (frameCount - nace) / 45));
+}
 const nbrsOfType = (n, type) => [...n.nbr].filter(m => m.type === type);
 
-/* ── AGRUPACIONES ─────────────────────────────── */
-let modoGrupo = 'ninguna';
-let grupoColor = {};
-let grupoAncla = {};
+/* ── NODOS: los grupos surgen navegando ── */
+let constel = null;   // { nombre, color, miembros: [] }
 
-function asignarGrupos(modo) {
-  modoGrupo = modo;
-  NODES.forEach(n => n.grupos = []);
-  const cfg = GRUPOS[modo];
-  grupoColor = Object.assign({}, cfg.colores || {});
+function teoriaDe(concepto) {
+  const T = CONSTELACIONES.teorias;
+  return Object.keys(T).find(k => k === concepto.label || (T[k].disparadores || []).includes(concepto.label));
+}
 
-  if (modo === 'region' || modo === 'medio') {
-    NODES.filter(n => n.type === 'referente').forEach(n => {
-      n.tags.forEach(t => { if (cfg.tags[t]) n.grupos.push(cfg.tags[t]); });
-    });
-    // la categoría misma también pertenece a su grupo
-    Object.entries(cfg.tags).forEach(([t, g]) => { if (byId['c:' + t]) byId['c:' + t].grupos.push(g); });
+function armarConstelacion(n) {
+  if (n.type === 'categoria') {
+    return {
+      nombre: n.label,
+      color: CONSTELACIONES.colores[n.label] || COL.white,
+      miembros: [n, ...nbrsOfType(n, 'referente')]
+    };
   }
-  if (modo === 'tipo') {
-    NODES.filter(n => n.type === 'referente').forEach(n => {
-      n.grupos.push(n.tags.has('colectivo') ? 'Colectivos' : 'Individuales');
-    });
-    if (byId['c:colectivo']) byId['c:colectivo'].grupos.push('Colectivos');
+  if (n.type === 'concepto') {
+    const teo = teoriaDe(n);
+    if (teo) {
+      const def = CONSTELACIONES.teorias[teo];
+      const nets = NODES.filter(m => m.type === 'netiana' &&
+        (m.data.t.includes(teo) || (def.netianas || []).includes(m.letra) || m.nbr.has(n)));
+      const cons = (def.conceptos || []).map(c => byId['t:' + c]).filter(Boolean);
+      return { nombre: teo, color: def.color, miembros: [...new Set([n, ...cons, ...nets])] };
+    }
+    return { nombre: '#' + n.label, color: COL.mag, miembros: [n, ...nbrsOfType(n, 'netiana')] };
   }
-  if (modo === 'teoria') {
-    Object.entries(cfg.teorias).forEach(([teo, def]) => {
-      NODES.filter(n => n.type === 'netiana').forEach(n => {
-        if (n.data.t.includes(teo) || (def.netianas || []).includes(n.letra)) n.grupos.push(teo);
-      });
-      (def.conceptos || []).forEach(c => { if (byId['t:' + c]) byId['t:' + c].grupos.push(teo); });
-    });
+  return null;
+}
+
+// árbol de expansión mínima: cada nodo del grupo se une con su vecino más cercano
+function arbol(ms) {
+  if (ms.length < 2) return [];
+  const dentro = [ms[0]], fuera = ms.slice(1), aristas = [];
+  while (fuera.length) {
+    let best = null, bd = Infinity, bi = -1;
+    dentro.forEach(a => fuera.forEach((b, i) => {
+      const d = (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+      if (d < bd) { bd = d; best = [a, b]; bi = i; }
+    }));
+    aristas.push(best);
+    dentro.push(fuera.splice(bi, 1)[0]);
   }
-  let i = 0;
-  NODES.forEach(n => n.grupos.forEach(g => { if (!grupoColor[g]) grupoColor[g] = PALETA[i++ % PALETA.length]; }));
-  // cada grupo recibe un ancla en un anillo, en orden al azar: tampoco acá hay jerarquía
-  const nombres = Object.keys(grupoColor).sort(() => Math.random() - .5);
-  const off = Math.random() * Math.PI * 2;
-  grupoAncla = {};
-  nombres.forEach((g, j) => {
-    const a = off + j / nombres.length * Math.PI * 2;
-    grupoAncla[g] = { x: Math.cos(a) * 360, y: Math.sin(a) * 360 };
-  });
-  calor = Math.max(calor, 1);
+  return aristas;
 }
 
 /* ── ESTADO ───────────────────────────────────── */
-const cam = { x: 0, y: 0, z: 1, tx: null, ty: null };
+const cam = { x: 0, y: 0, z: 1, tx: null, ty: null, tz: null };
 let hover = null, selected = null, calor = 1;
-const filtros = { concepto: true, referente: true, categoria: true };
-const visibleTotal = () => NODES.filter(isShown).length;
-
-function isShown(n) { return n.visible && (n.type === 'netiana' || filtros[n.type]); }
+const recorrido = [];          // el camino que va dejando quien navega
+const visibleTotal = () => NODES.filter(n => n.visible).length;
 
 function reveal(n, from) {
   if (n.visible) return false;
@@ -136,18 +196,26 @@ function revealNeighbors(n) {
   if (c) calor = 1;
   return c;
 }
-const hiddenCount = n => [...n.nbr].filter(m => !m.visible || !isShown(m)).length;
+const hiddenCount = n => [...n.nbr].filter(m => !m.visible).length;
+
+let focos = [];
 
 function resetGraph() {
-  NODES.forEach(n => n.visible = false);
-  const N = NODES.filter(n => n.type === 'netiana');
-  N.forEach((n, i) => {
+  NODES.forEach(n => { n.visible = false; n.visitas = 0; });
+  NODES.forEach(n => n.fijo = false);
+  // sin centro: la red se reparte en varios focos, cada vez distintos
+  const nf = 3 + Math.floor(Math.random() * 3);
+  // los focos se reparten según la forma de la pantalla (ancha en compu, alta en celular)
+  const ancho = window.innerWidth > 760;
+  focos = Array.from({ length: nf }, () => ({ x: (Math.random() - .5) * (ancho ? 2200 : 650), y: (Math.random() - .5) * (ancho ? 1400 : 1200) }));
+  NODES.filter(n => n.type === 'netiana').forEach(n => {
     n.visible = true; n.born = frameCount - 60;
-    // posición al azar: no hay centro
-    const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 170;
-    n.x = Math.cos(a) * r; n.y = Math.sin(a) * r; n.vx = n.vy = 0;
+    n.foco = focos[Math.floor(Math.random() * nf)];
+    n.x = n.foco.x + (Math.random() - .5) * 160; n.y = n.foco.y + (Math.random() - .5) * 160;
+    n.vx = n.vy = 0;
   });
-  selected = null;
+  recorrido.length = 0;
+  constel = null;
   closePanel();
   calor = 1;
   for (let i = 0; i < 160; i++) step();
@@ -158,10 +226,9 @@ function resetGraph() {
 const LARGO = { concepto: 70, referente: 95, categoria: 80 };
 
 function step() {
-  const vis = NODES.filter(isShown);
+  const vis = NODES.filter(n => n.visible);
   const k = 0.25 + 0.75 * calor;
 
-  // repulsión entre todos los nodos visibles
   for (let i = 0; i < vis.length; i++) {
     const a = vis[i];
     for (let j = i + 1; j < vis.length; j++) {
@@ -176,65 +243,68 @@ function step() {
       a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
     }
   }
-  // resortes en las conexiones
   EDGES.forEach(e => {
-    if (!isShown(e.a) || !isShown(e.b)) return;
+    if (!e.a.visible || !e.b.visible) return;
     const other = e.a.type === 'netiana' ? e.b : e.a;
     const L = LARGO[other.type] || 80;
     const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
     const d = Math.sqrt(dx * dx + dy * dy) || 1;
-    const f = (d - L) * 0.012;
+    // las categorías son puentes largos y flojos: no deben juntar todo en una bola
+    const f = (d - L) * (other.type === 'categoria' ? 0.003 : 0.012);
     const fx = dx / d * f, fy = dy / d * f;
-    // los nodos con más conexiones se mueven menos
     const wa = 1 / Math.sqrt(e.a.deg), wb = 1 / Math.sqrt(e.b.deg);
     e.a.vx += fx * wa; e.a.vy += fy * wa; e.b.vx -= fx * wb; e.b.vy -= fy * wb;
   });
-  // agrupaciones: cada miembro es atraído al centro de cada grupo al que pertenece
-  if (modoGrupo !== 'ninguna') {
-    const cen = {};
-    vis.forEach(n => n.grupos.forEach(g => {
-      (cen[g] = cen[g] || { x: 0, y: 0, c: 0 });
-      cen[g].x += n.x; cen[g].y += n.y; cen[g].c++;
-    }));
-    vis.forEach(n => n.grupos.forEach(g => {
-      const c = cen[g], an = grupoAncla[g];
-      const kk = 1 / n.grupos.length;
-      // hacia su ancla (separa los grupos) y hacia el centro del grupo (lo aprieta)
-      n.vx += ((an.x - n.x) * 0.012 + (c.c > 1 ? (c.x / c.c - n.x) * 0.014 : 0)) * kk;
-      n.vy += ((an.y - n.y) * 0.012 + (c.c > 1 ? (c.y / c.c - n.y) * 0.014 : 0)) * kk;
-    }));
+  LATERALES.forEach(e => {
+    if (!e.a.visible || !e.b.visible) return;
+    const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const f = (d - 150) * 0.0004;
+    e.a.vx += dx / d * f; e.a.vy += dy / d * f; e.b.vx -= dx / d * f; e.b.vy -= dy / d * f;
+  });
+  // el nodo activo se aprieta: un grupito de conexiones más cercanas
+  if (constel) {
+    const ms = constel.miembros.filter(m => m.visible);
+    if (ms.length > 1) {
+      const cx = ms.reduce((s, m) => s + m.x, 0) / ms.length;
+      const cy = ms.reduce((s, m) => s + m.y, 0) / ms.length;
+      ms.forEach(m => { m.vx += (cx - m.x) * 0.0035; m.vy += (cy - m.y) * 0.0035; });
+    }
   }
-  // gravedad suave + deriva (rizoma vivo)
   const t = frameCount * 0.004;
   vis.forEach(n => {
-    n.vx += -n.x * 0.0009 + (noise(n.x * 0.002, t) - .5) * 0.05;
-    n.vy += -n.y * 0.0009 + (noise(n.y * 0.002, t + 50) - .5) * 0.05;
-    if (n === dragging) return;
+    // cada netiana tiende a su foco; el resto sigue a sus raíces. Casi sin gravedad global
+    const fx = n.foco ? (n.foco.x - n.x) * 0.006 : -n.x * 0.00008;
+    const fy = n.foco ? (n.foco.y - n.y) * 0.006 : -n.y * 0.00008;
+    n.vx += fx + (noise(n.x * 0.002, t) - .5) * 0.05;
+    n.vy += fy + (noise(n.y * 0.002, t + 50) - .5) * 0.05;
+    // lo que alguien acomodó con el mouse queda donde lo dejó
+    if (n === dragging || n.fijo) { n.vx = n.vy = 0; return; }
     n.vx *= 0.82; n.vy *= 0.82;
     const max = 12;
     n.vx = Math.max(-max, Math.min(max, n.vx)) * k;
     n.vy = Math.max(-max, Math.min(max, n.vy)) * k;
     n.x += n.vx; n.y += n.vy;
   });
-  calor = Math.max(0.02, calor * 0.992);
+  calor = Math.max(constel ? 0.15 : 0.02, calor * 0.992);
 }
 
 /* ── CÁMARA ───────────────────────────────────── */
 function panelOffset() {
   const p = document.getElementById('panel');
   if (p.hidden) return { x: 0, y: 0 };
-  return window.innerWidth > 760 ? { x: p.offsetWidth / 2, y: 0 } : { x: 0, y: p.offsetHeight / 2 - 55 };
+  return window.innerWidth > 760 ? { x: p.offsetWidth / 2, y: 0 } : { x: 0, y: p.offsetHeight / 2 - 45 };
 }
 function fit(instant) {
-  const vis = NODES.filter(isShown);
+  const vis = NODES.filter(n => n.visible);
   if (!vis.length) return;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   vis.forEach(n => { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
   const off = panelOffset();
-  const w = width - off.x * 2 - 80, h = height - off.y * 2 - 220;
-  const z = Math.min(2, Math.max(0.25, Math.min(w / (x1 - x0 + 120), h / (y1 - y0 + 120))));
+  const w = width - off.x * 2 - 80, h = height - off.y * 2 - 170;
+  const z = Math.min(2, Math.max(0.25, Math.min(w / (x1 - x0 + 140), h / (y1 - y0 + 140))));
   cam.tz = z;
-  cam.tx = (x0 + x1) / 2; cam.ty = (y0 + y1) / 2 - 40 / z;
+  cam.tx = (x0 + x1) / 2; cam.ty = (y0 + y1) / 2 - 30 / z;
   if (instant) { cam.x = cam.tx; cam.y = cam.ty; cam.z = z; cam.tx = cam.ty = cam.tz = null; }
 }
 function focusOn(n) { cam.tx = n.x; cam.ty = n.y; cam.tz = Math.max(cam.z, 1); }
@@ -249,12 +319,25 @@ function screenCenter() { const o = panelOffset(); return { x: width / 2 - o.x, 
 function toWorld(sx, sy) { const c = screenCenter(); return { x: (sx - c.x) / cam.z + cam.x, y: (sy - c.y) / cam.z + cam.y }; }
 function toScreen(wx, wy) { const c = screenCenter(); return { x: (wx - cam.x) * cam.z + c.x, y: (wy - cam.y) * cam.z + c.y }; }
 
-/* ── DIBUJO ───────────────────────────────────── */
-function radius(n) {
-  if (n.type === 'netiana') return 15 + Math.sqrt(n.deg) * 1.6;
-  if (n.type === 'referente') return 4 + Math.sqrt(n.deg) * 1.2;
-  if (n.type === 'categoria') return 4 + Math.sqrt(n.deg) * 0.9;
-  return 3.5 + Math.sqrt(n.deg) * 1.4;
+/* ── DIBUJO: red de código, estética JODI / VNS Matrix ── */
+const GLIFO = { netiana: null, concepto: '#', referente: null, categoria: '()' };
+
+// tamaño del glifo en unidades del mundo
+function glyphSize(n) {
+  if (n.type === 'netiana') return 22 + Math.sqrt(n.deg) * 1.2;
+  if (n.type === 'referente') return 11 + Math.sqrt(n.deg) * 1.2;
+  if (n.type === 'categoria') return 10 + Math.sqrt(n.deg) * 0.8;
+  return 11 + Math.sqrt(n.deg) * 1.3;
+}
+function radius(n) { return glyphSize(n) * (n.type === 'netiana' ? 0.75 : 0.4); }
+
+function glyphOf(n) {
+  if (n.type === 'netiana') return '[' + n.letra + ']';
+  if (n.type === 'referente') {
+    // los referentes son bits: cada tanto cambian de 0 a 1
+    return noise(n.seed, frameCount * 0.01) > 0.5 ? '1' : '0';
+  }
+  return GLIFO[n.type];
 }
 
 function focusSet() {
@@ -262,17 +345,215 @@ function focusSet() {
   if (!f) return null;
   const s = new Set([f]);
   f.nbr.forEach(m => s.add(m));
+  if (constel && f === selected) constel.miembros.forEach(m => s.add(m));
   return s;
 }
+
+/* glitch: ráfagas al tocar y al aparecer nodos, y una base sutil siempre */
+let rafaga = 0;
+
+/* ── LA RED FUNCIONANDO: datos que viajan y ondas ── */
+const paquetes = [];   // { a, b, t, v, glifo, col, salto }
+const ondas = [];      // { x, y, t, col }
+const MAX_PAQUETES = 70;
+
+function enviar(a, b, salto, rapido) {
+  if (paquetes.length >= MAX_PAQUETES) return;
+  const tipo = a.type === 'netiana' ? b.type : a.type;
+  const e = edgeMap[claveDe(a, b)];
+  if (!e) return;
+  paquetes.push({
+    a, b, e, ida: e.a === a, t: 0,
+    v: (rapido ? 0.035 : 0.006 + Math.random() * 0.01),
+    glifo: random(tipo === 'concepto' ? ['#', '#', '%'] : ['0', '1', '0', '1', '¤']),
+    col: TIPOS[a.type === 'netiana' ? b.type : a.type].color,
+    salto
+  });
+}
+
+// tráfico de fondo: la red transmite aunque nadie la toque
+function trafico() {
+  if (Math.random() > 0.35) return;
+  const vivas = EDGES.concat(LATERALES).filter(e => e.a.visible && e.b.visible && crecimiento(e) >= 1);
+  if (!vivas.length) return;
+  const e = vivas[Math.floor(Math.random() * vivas.length)];
+  Math.random() < .5 ? enviar(e.a, e.b, 9, false) : enviar(e.b, e.a, 9, false);
+}
+
+// una onda sale del nodo tocado y se propaga dos saltos por sus conexiones
+function onda(n) {
+  ondas.push({ x: n.x, y: n.y, t: 0, col: TIPOS[n.type].color });
+  n.pulso = 1;
+  n.nbr.forEach(m => { if (m.visible) enviar(n, m, 0, true); });
+}
+
+function actualizarPaquetes() {
+  trafico();
+  for (let i = paquetes.length - 1; i >= 0; i--) {
+    const p = paquetes[i];
+    p.t += p.v;
+    if (!p.a.visible || !p.b.visible) { paquetes.splice(i, 1); continue; }
+    if (p.t >= 1) {
+      paquetes.splice(i, 1);
+      p.b.pulso = Math.max(p.b.pulso || 0, p.salto < 9 ? 1 : 0.6);
+      // la onda sigue un salto más, más débil
+      if (p.salto === 0) {
+        ondas.push({ x: p.b.x, y: p.b.y, t: 0.35, col: p.col });
+        [...p.b.nbr].filter(m => m.visible && m !== p.a).slice(0, 4).forEach(m => enviar(p.b, m, 1, true));
+      }
+    }
+  }
+  NODES.forEach(n => { if (n.pulso) n.pulso = n.pulso > 0.01 ? n.pulso * 0.93 : 0; });
+  for (let i = ondas.length - 1; i >= 0; i--) { ondas[i].t += 0.02; if (ondas[i].t >= 1) ondas.splice(i, 1); }
+}
+
+function drawPaquetes() {
+  textAlign(CENTER, CENTER);
+  noStroke();
+  paquetes.forEach(p => {
+    const c0 = curva(p.e);
+    const at = tt => puntoCurva(c0, p.ida ? tt : 1 - tt);
+    const [x, y] = at(Math.min(1, p.t));
+    const rapido = p.salto < 9;
+    // estela sobre la conexión
+    const c = color(p.col);
+    c.setAlpha(rapido ? 170 : 70);
+    stroke(c); strokeWeight((rapido ? 1.4 : 0.8) / Math.sqrt(cam.z));
+    const t0 = Math.max(0, p.t - (rapido ? 0.18 : 0.08));
+    noFill();
+    beginShape();
+    for (let k = 0; k <= 4; k++) { const [qx, qy] = at(lerp(t0, Math.min(1, p.t), k / 4)); vertex(qx, qy); }
+    endShape();
+    noStroke();
+    c.setAlpha(rapido ? 255 : 150);
+    fill(c);
+    textSize((rapido ? 11 : 8) / Math.pow(cam.z, 0.3));
+    text(p.glifo, x, y);
+  });
+}
+
+/* ── INVITACIÓN: un latido recorre la red cuando nadie la toca ── */
+let ultimoToque = -99999;
+let latido = null;          // { path: [nodos], i, p }
+let proximoLatido = 90;
+let llamado = null;         // { n, hasta }: el nodo donde termina el latido late pidiendo que lo toquen
+const enReposo = () => millis() - ultimoToque > 5000;
+
+// ritmo de corazón: lub-dub
+function palpito() {
+  const ph = (frameCount % 75) / 75;
+  const g = (x, c, w) => Math.exp(-((x - c) ** 2) / (2 * w * w));
+  return g(ph, 0.05, 0.03) + 0.6 * g(ph, 0.2, 0.03);
+}
+
+// forma de electrocardiograma: onda P, complejo QRS, onda T
+function ecg(x) {
+  const g = (c, w) => Math.exp(-((x - c) ** 2) / (2 * w * w));
+  return 0.15 * g(0.15, 0.035) - 0.15 * g(0.33, 0.012) + 1 * g(0.37, 0.014) - 0.4 * g(0.41, 0.013) + 0.28 * g(0.66, 0.05);
+}
+
+function caminoLatido() {
+  const vivas = EDGES.concat(LATERALES).filter(e => e.a.visible && e.b.visible && crecimiento(e) >= 1);
+  const vecinos = n => vivas.filter(e => e.a === n || e.b === n).map(e => e.a === n ? e.b : e.a);
+  const nets = NODES.filter(n => n.type === 'netiana' && n.visible && vecinos(n).length);
+  if (!nets.length) return null;
+  let actual = nets[Math.floor(Math.random() * nets.length)];
+  const path = [actual];
+  const saltos = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < saltos; i++) {
+    let op = vecinos(actual).filter(m => !path.includes(m));
+    // el último salto busca una netiana: ahí se abre la invitación
+    if (i === saltos - 1) { const nn = op.filter(m => m.type === 'netiana'); if (nn.length) op = nn; }
+    if (!op.length) break;
+    actual = op[Math.floor(Math.random() * op.length)];
+    path.push(actual);
+  }
+  return path.length > 1 ? { path, i: 0, p: 0 } : null;
+}
+
+function actualizarLatido() {
+  if (!latido && enReposo() && frameCount >= proximoLatido) latido = caminoLatido();
+  if (!latido) return;
+  latido.p += 0.022;
+  if (latido.p >= 1) {
+    const llega = latido.path[latido.i + 1];
+    llega.pulso = 1;
+    ondas.push({ x: llega.x, y: llega.y, t: 0.45, col: COL.mag });
+    latido.i++; latido.p = 0;
+    if (latido.i >= latido.path.length - 1) {
+      llamado = { n: llega, hasta: frameCount + 150 };
+      latido = null;
+      proximoLatido = frameCount + 100;
+    }
+  }
+}
+
+function drawLatido() {
+  if (latido) {
+    const a = latido.path[latido.i], b = latido.path[latido.i + 1];
+    const e = edgeMap[claveDe(a, b)];
+    if (e && a.visible && b.visible) {
+      const c = curva(e);
+      const ida = e.a === a;
+      const at = t => puntoCurva(c, ida ? t : 1 - t);
+      const W = 0.55, amp = 30 / Math.pow(cam.z, 0.75);
+      noFill();
+      drawingContext.shadowBlur = 12; drawingContext.shadowColor = COL.mag;
+      stroke(255, 0, 255, 230);
+      strokeWeight(1.5 / Math.sqrt(cam.z));
+      beginShape();
+      const N = 40;
+      for (let k = 0; k <= N; k++) {
+        const t = latido.p - W + (k / N) * W;
+        if (t < 0 || t > 1) continue;
+        const [x, y] = at(t);
+        const [x2, y2] = at(Math.min(1, t + 0.01));
+        const ang = Math.atan2(y2 - y, x2 - x);
+        const h = ecg(k / N) * amp;
+        vertex(x - Math.sin(ang) * h, y + Math.cos(ang) * h);
+      }
+      endShape();
+      drawingContext.shadowBlur = 0;
+      const [hx, hy] = at(Math.min(1, latido.p));
+      noStroke(); fill(255, 0, 255);
+      circle(hx, hy, 4 / Math.sqrt(cam.z));
+    }
+  }
+  // el nodo donde terminó el latido pide que lo toquen
+  if (llamado && frameCount < llamado.hasta && llamado.n.visible && enReposo()) {
+    const n = llamado.n;
+    const s = glyphSize(n) * (1.05 + 0.25 * palpito()), q = s * 0.35;
+    const a = 255 * Math.min(1, (llamado.hasta - frameCount) / 40);
+    stroke(255, 0, 255, a); strokeWeight(1.3 / cam.z); noFill();
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+      line(n.x + sx * s, n.y + sy * s, n.x + sx * (s - q), n.y + sy * s);
+      line(n.x + sx * s, n.y + sy * s, n.x + sx * s, n.y + sy * (s - q));
+    });
+  }
+}
+
+function drawOndas() {
+  noFill();
+  ondas.forEach(o => {
+    const c = color(o.col);
+    c.setAlpha(200 * (1 - o.t));
+    stroke(c);
+    strokeWeight(1.2 / cam.z);
+    const r = 12 + o.t * 140;
+    // anillo cuadrado, pixelado, que se expande
+    rect(o.x - r, o.y - r, r * 2, r * 2);
+    if (o.t < 0.5) { c.setAlpha(120 * (1 - o.t * 2)); stroke(c); rect(o.x - r * 0.6, o.y - r * 0.6, r * 1.2, r * 1.2); }
+  });
+}
+function glitchear(f) { rafaga = Math.max(rafaga, f); }
 
 function setup() {
   const cnv = createCanvas(window.innerWidth, window.innerHeight);
   cnv.parent('lienzo');
   pixelDensity(Math.min(2, displayDensity()));
-  textFont('Share Tech Mono');
+  textFont('VT323');
   bindPointer(cnv.elt);
-  buildHud();
-  asignarGrupos('ninguna');
+  bindUi();
   resetGraph();
 }
 
@@ -289,118 +570,180 @@ function draw() {
   scale(cam.z);
   translate(-cam.x, -cam.y);
 
-  const vis = NODES.filter(isShown);
+  const vis = NODES.filter(n => n.visible);
   const fs = focusSet();
 
-  drawGrupos(vis);
   drawEdges(fs);
-  vis.forEach(n => drawNode(n, fs));
+  actualizarPaquetes();
+  drawRecorrido();
+  drawOndas();
+  actualizarLatido();
+  drawLatido();
+  drawPaquetes();
+  drawNodo();
+  vis.forEach(n => drawGlyph(n, fs));
   vis.forEach(n => drawLabel(n, fs));
   pop();
 
-  updateContador(vis.length);
-}
-
-function drawGrupos(vis) {
-  if (modoGrupo === 'ninguna') return;
-  const cen = {};
-  noStroke();
-  vis.forEach(n => n.grupos.forEach(g => {
-    const col = color(grupoColor[g]);
-    col.setAlpha(16);
-    fill(col);
-    circle(n.x, n.y, 92);
-    col.setAlpha(26);
-    fill(col);
-    circle(n.x, n.y, 46);
-    (cen[g] = cen[g] || { x: 0, y: 0, c: 0, m: [] });
-    cen[g].x += n.x; cen[g].y += n.y; cen[g].c++; cen[g].m.push(n);
-  }));
-  textAlign(CENTER, BOTTOM);
-  textFont('VT323');
-  Object.entries(cen).forEach(([g, c]) => {
-    if (c.c < 2) return;
-    const col = color(grupoColor[g]);
-    col.setAlpha(210);
-    fill(col);
-    textSize(22 / Math.sqrt(cam.z));
-    // la etiqueta va del lado de afuera del cúmulo, en dirección a su ancla
-    const cx = c.x / c.c, cy = c.y / c.c;
-    const rad = Math.max(...c.m.map(n => Math.hypot(n.x - cx, n.y - cy))) + 56;
-    const an = grupoAncla[g];
-    const L = Math.hypot(an.x, an.y) || 1;
-    text(g.toUpperCase() + ' · ' + c.c, cx + an.x / L * rad, cy + an.y / L * rad + 8);
-  });
-  textFont('Share Tech Mono');
+  postGlitch();
 }
 
 function drawEdges(fs) {
-  EDGES.forEach(e => {
-    if (!isShown(e.a) || !isShown(e.b)) return;
-    const lit = fs && fs.has(e.a) && fs.has(e.b) && (e.a === (hover || selected) || e.b === (hover || selected));
+  const f = hover || selected;
+  noFill();
+  EDGES.concat(LATERALES).forEach(e => {
+    if (!e.a.visible || !e.b.visible) return;
+    const lit = !e.lateral && f && (e.a === f || e.b === f) && !(constel && f === selected);
     const other = e.a.type === 'netiana' ? e.b : e.a;
-    const col = color(lit ? TIPOS[other.type].color : COL.green);
-    // titileo de la red: cada tanto una conexión destella
-    const flick = noise(e.seed, frameCount * 0.03) > 0.78 ? 1.8 : 1;
-    const apagada = modoGrupo !== 'ninguna' && (!e.a.grupos.length || !e.b.grupos.length);
-    col.setAlpha(lit ? 200 : (fs ? 18 : (apagada ? 16 : 42) * flick));
+    const col = color(lit ? TIPOS[other.type].color : (e.lateral ? COL.white : COL.green));
+    const ruido = noise(e.seed, frameCount * 0.03);
+    const base = e.lateral ? 26 : 58;
+    col.setAlpha(lit ? 170 : (fs ? 10 : (ruido > 0.82 ? base * 2.6 : base)));
     stroke(col);
-    strokeWeight((lit ? 1.4 : 0.7) / cam.z ** 0.5);
-    line(e.a.x, e.a.y, e.b.x, e.b.y);
+    strokeWeight((lit ? 1.1 : (e.lateral ? 0.45 : 0.7)) / Math.sqrt(cam.z));
+
+    const c = curva(e);
+    const g = crecimiento(e);
+    // brota desde el nodo que nació antes
+    const desdeA = e.a.born <= e.b.born;
+    const N = 16;
+    // raíz rota: cada tanto un tramo se corta (glitch)
+    const corte = !lit && ruido < 0.14 ? Math.floor(N * (0.3 + ruido * 2.5)) : -1;
+    beginShape();
+    for (let i = 0; i <= N; i++) {
+      const t = (i / N) * g;
+      const [x, y] = puntoCurva(c, desdeA ? t : 1 - t);
+      if (i === corte) { endShape(); beginShape(); continue; }
+      vertex(x + (i === corte + 1 ? (Math.random() - .5) * 6 : 0), y);
+    }
+    endShape();
+
+    // ramificaciones: pelitos de raíz que salen de la conexión
+    if (g > 0.85 && !(fs && !lit)) {
+      const ramas = Math.floor(e.seed % 3);
+      col.setAlpha((lit ? 120 : base * 0.9) * (g - 0.85) / 0.15);
+      stroke(col);
+      strokeWeight(0.4 / Math.sqrt(cam.z));
+      for (let r = 0; r < ramas; r++) {
+        const t = 0.25 + ((e.seed * (r + 1) * 7.13) % 1) * 0.5;
+        const [px, py] = puntoCurva(c, t);
+        const [qx, qy] = puntoCurva(c, t + 0.02);
+        const ang = Math.atan2(qy - py, qx - px) + (r % 2 ? 1 : -1) * (0.7 + 0.4 * noise(e.seed + r, frameCount * 0.01));
+        const L = 7 + ((e.seed * (r + 3)) % 14);
+        const mx = px + Math.cos(ang) * L * 0.5, my = py + Math.sin(ang) * L * 0.5;
+        const a2 = ang + (r % 2 ? 0.5 : -0.5);
+        line(px, py, mx, my);
+        line(mx, my, mx + Math.cos(a2) * L * 0.5, my + Math.sin(a2) * L * 0.5);
+      }
+    }
   });
 }
 
-function drawNode(n, fs) {
-  const age = frameCount - n.born;
-  const grow = Math.min(1, age / 18);
-  let r = radius(n) * (0.2 + 0.8 * easeOut(grow));
-  const sinGrupo = modoGrupo !== 'ninguna' && !n.grupos.length && n.type !== 'netiana';
-  const dim = (fs && !fs.has(n)) || (!fs && sinGrupo);
-  const col = color(TIPOS[n.type].color);
-  if (dim) col.setAlpha(sinGrupo && !fs ? 70 : 60);
+function drawRecorrido() {
+  if (recorrido.length < 2) return;
+  noFill();
+  stroke(255, 0, 255, 80);
+  strokeWeight(0.8 / cam.z);
+  drawingContext.setLineDash([2 / cam.z, 5 / cam.z]);
+  beginShape();
+  recorrido.forEach(n => vertex(n.x, n.y));
+  endShape();
+  drawingContext.setLineDash([]);
+}
 
-  // glitch al nacer
-  let gx = 0, gy = 0;
-  if (age < 22 && Math.random() < 0.35) { gx = (Math.random() - .5) * 8; gy = (Math.random() - .5) * 3; }
+// el nodo que surge al navegar: sus miembros se unen con trazos en escalera, como un circuito
+function drawNodo() {
+  if (!constel) return;
+  const ms = constel.miembros.filter(m => m.visible);
+  const col = color(constel.color);
+  col.setAlpha(200);
+  stroke(col);
+  strokeWeight(1.1 / Math.sqrt(cam.z));
+  noFill();
+  arbol(ms).forEach(([a, b], i) => {
+    const mx = i % 2 ? a.x : b.x;
+    const my = i % 2 ? b.y : a.y;
+    line(a.x, a.y, mx, my);
+    line(mx, my, b.x, b.y);
+  });
+  // marco de la zona del nodo
+  const xs = ms.map(m => m.x), ys = ms.map(m => m.y);
+  const x0 = Math.min(...xs) - 26, y0 = Math.min(...ys) - 26, x1 = Math.max(...xs) + 26, y1 = Math.max(...ys) + 26;
+  col.setAlpha(70);
+  stroke(col);
+  drawingContext.setLineDash([6 / cam.z, 4 / cam.z]);
+  rect(x0, y0, x1 - x0, y1 - y0);
+  drawingContext.setLineDash([]);
+  noStroke();
+  col.setAlpha(230); fill(col);
+  textAlign(LEFT, BOTTOM);
+  textSize(19 / Math.sqrt(cam.z));
+  const cursor = frameCount % 40 < 20 ? '_' : ' ';
+  text('> ' + constel.nombre + cursor, x0, y0 - 4 / cam.z);
+}
+
+function drawGlyph(n, fs) {
+  const age = frameCount - n.born;
+  const dim = fs && !fs.has(n);
+  const hid = hiddenCount(n);
+  const lat = n.pulso || 0;
+  // en reposo, las netianas palpitan: la red está viva y se puede tocar
+  const palp = n.type === 'netiana' && enReposo() ? 0.08 * palpito() : 0;
+  const sz = glyphSize(n) * (n === hover ? 1.2 : 1) * (1 + 0.45 * lat + palp);
+  const g = glyphOf(n);
+  const base = color(TIPOS[n.type].color);
+
+  // al nacer: aparece como ruido y se estabiliza
+  let gx = 0, gy = 0, txt = g;
+  if (age < 26) {
+    gx = (Math.random() - .5) * 10; gy = (Math.random() - .5) * 4;
+    if (Math.random() < 0.6) txt = random(['%', '$', '&', '?', '@', '▓', '░', '¤', g]);
+  } else if (Math.random() < 0.004) {
+    gx = (Math.random() - .5) * 8;
+  }
 
   push();
-  translate(n.x + gx, n.y + gy);
-
-  // anillo de lo que falta descubrir
-  const h = hiddenCount(n);
-  if (h > 0 && !dim) {
-    noFill();
-    const pc = color(n.type === 'netiana' ? COL.mag : COL.gd);
-    pc.setAlpha(90 + 70 * Math.sin(frameCount * 0.06 + n.x));
-    stroke(pc);
-    strokeWeight(1 / cam.z);
-    drawingContext.setLineDash([3 / cam.z, 4 / cam.z]);
-    circle(0, 0, (r + 6) * 2);
-    drawingContext.setLineDash([]);
-  }
+  translate(n.x, n.y);
+  textAlign(CENTER, CENTER);
+  textSize(sz);
+  noStroke();
+  const a = dim ? 55 : 255;
 
   if (n === selected) {
-    noFill(); stroke(COL.mag); strokeWeight(1.6 / cam.z);
-    circle(0, 0, (r + 10) * 2 + Math.sin(frameCount * 0.1) * 2);
+    // video inverso, como un cursor de terminal
+    const w = textWidth(txt) + sz * 0.3;
+    fill(base); rect(-w / 2, -sz * 0.55, w, sz * 1.05);
+    fill(COL.bg); text(txt, 0, -sz * 0.06);
+  } else {
+    // aberración cromática: canal magenta y cian desplazados
+    if (!dim && (age < 26 || n === hover || n.type === 'netiana')) {
+      const off = (age < 26 ? 3 : 1) * (0.6 + Math.random() * 0.6);
+      fill(255, 0, 255, a * 0.55); text(txt, gx - off, gy - sz * 0.06);
+      fill(0, 255, 255, a * 0.45); text(txt, gx + off, gy - sz * 0.06);
+    }
+    base.setAlpha(a);
+    if ((n.type === 'netiana' || lat > 0.2) && !dim) { drawingContext.shadowBlur = 10 + 18 * lat; drawingContext.shadowColor = TIPOS[n.type].color; }
+    fill(base); text(txt, gx, gy - sz * 0.06);
+    drawingContext.shadowBlur = 0;
   }
 
-  if (n.type === 'netiana') {
-    fill(COL.bg); stroke(col); strokeWeight(n === hover ? 2.2 : 1.4);
-    if (!dim) drawingContext.shadowBlur = 14, drawingContext.shadowColor = COL.green;
-    circle(0, 0, r * 2);
-    drawingContext.shadowBlur = 0;
-    noStroke(); fill(col);
-    textFont('VT323'); textAlign(CENTER, CENTER); textSize(r * 1.35);
-    text(n.letra, 0, -r * 0.08);
-    textFont('Share Tech Mono');
-  } else if (n.type === 'categoria') {
-    noFill(); stroke(col); strokeWeight(1.2);
-    rotate(PI / 4); rectMode(CENTER); square(0, 0, r * 1.7);
-  } else {
-    noStroke(); fill(col);
-    if (!dim && (n === hover || n === selected)) drawingContext.shadowBlur = 10, drawingContext.shadowColor = TIPOS[n.type].color;
-    circle(0, 0, r * 2);
-    drawingContext.shadowBlur = 0;
+  // cursor parpadeante: este nodo todavía tiene conexiones por descubrir
+  if (hid > 0 && !dim && n !== selected && frameCount % 50 < 25 + (n.seed % 10)) {
+    const c2 = color(n.type === 'netiana' ? COL.mag : TIPOS[n.type].color);
+    c2.setAlpha(200);
+    fill(c2);
+    textSize(sz * 0.8);
+    textAlign(LEFT, CENTER);
+    text('_', textWidth(g) / 2 + sz * 0.05, sz * 0.05);
+  }
+
+  // marca de anclado: esquinas mínimas alrededor del nodo que alguien acomodó
+  if (n.fijo && !dim) {
+    const s = sz * 0.75, q = sz * 0.22;
+    stroke(255, 0, 255, 160); strokeWeight(0.8 / cam.z); noFill();
+    line(-s, -s, -s + q, -s); line(-s, -s, -s, -s + q);
+    line(s, s, s - q, s); line(s, s, s, s - q);
+    noStroke();
   }
   pop();
 }
@@ -408,32 +751,57 @@ function drawNode(n, fs) {
 function drawLabel(n, fs) {
   const age = frameCount - n.born;
   const focused = fs && fs.has(n);
-  const dim = (fs && !focused) || (!fs && modoGrupo !== 'ninguna' && !n.grupos.length && n.type !== 'netiana');
-  let show = n.type === 'netiana' || focused || age < 90 ||
-    (n.type === 'referente' && cam.z > 1.25) ||
-    (n.type !== 'referente' && cam.z > 0.95);
+  const dim = fs && !focused;
+  const show = n.type === 'netiana' || focused || age < 90 ||
+    (n.type === 'referente' && cam.z > 1.4) ||
+    (n.type !== 'referente' && cam.z > 1.1);
   if (!show) return;
 
-  let a = 255;
-  if (dim) a = 50;
-  else if (!focused && n.type !== 'netiana' && age < 90 && cam.z <= 0.95) a = 255 * (1 - age / 90);
+  let a = 220;
+  if (dim) a = 45;
+  else if (!focused && n.type !== 'netiana' && age < 90 && cam.z <= 1.1) a = 220 * (1 - age / 90);
 
-  const r = radius(n);
-  const sz = (n.type === 'netiana' ? 13 : 10.5) / Math.pow(cam.z, 0.6);
-  textSize(sz);
-  textAlign(CENTER, TOP);
   noStroke();
-  let lbl = n.label;
-  if (n.type === 'concepto') lbl = '#' + lbl;
-  if (n.type === 'categoria') lbl = '(' + lbl + ')';
-  const col = color(n.type === 'netiana' ? COL.white : TIPOS[n.type].color);
-  col.setAlpha(a);
-  // fondo para leer sobre las líneas
-  fill(5, 5, 5, a * 0.7);
-  const w = textWidth(lbl);
-  rect(n.x - w / 2 - 2, n.y + r + 4, w + 4, sz + 2);
+  if (n.type === 'netiana') {
+    textFont('Share Tech Mono');
+    textSize(10.5 / Math.pow(cam.z, 0.6));
+    textAlign(CENTER, TOP);
+    const cw = color(COL.white); cw.setAlpha(a * 0.9); fill(cw);
+    text(n.label.toLowerCase(), n.x, n.y + glyphSize(n) * 0.5);
+    textFont('VT323');
+    return;
+  }
+  const lbl = n.label;
+  textFont('Share Tech Mono');
+  textSize(9 / Math.pow(cam.z, 0.6));
+  textAlign(LEFT, CENTER);
+  const col = color(TIPOS[n.type].color); col.setAlpha(a);
   fill(col);
-  text(lbl, n.x, n.y + r + 4);
+  text(lbl, n.x + glyphSize(n) * 0.55, n.y);
+  textFont('VT323');
+}
+
+// glitch de pantalla: franjas horizontales desplazadas y barras de color
+function postGlitch() {
+  if (rafaga > 0) rafaga--;
+  const intens = rafaga > 0 ? 1 : (Math.random() < 0.025 ? 0.35 : 0);
+  if (!intens) return;
+  const ctx = drawingContext, cv = ctx.canvas;
+  const d = pixelDensity();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const franjas = Math.ceil((rafaga > 0 ? 5 : 1) * Math.random() + 1);
+  for (let i = 0; i < franjas; i++) {
+    const y = Math.random() * cv.height;
+    const h = (4 + Math.random() * (rafaga > 0 ? 40 : 14)) * d;
+    const dx = (Math.random() - .5) * (rafaga > 0 ? 70 : 24) * d;
+    ctx.drawImage(cv, 0, y, cv.width, h, dx, y, cv.width, h);
+    if (Math.random() < 0.5 * intens) {
+      ctx.fillStyle = Math.random() < .5 ? 'rgba(255,0,255,0.18)' : 'rgba(0,255,255,0.14)';
+      ctx.fillRect(0, y, cv.width, h * 0.5);
+    }
+  }
+  ctx.restore();
 }
 
 const easeOut = t => 1 - Math.pow(1 - t, 3);
@@ -447,9 +815,9 @@ function nodeAt(sx, sy) {
   const w = toWorld(sx, sy);
   let best = null, bd = Infinity;
   NODES.forEach(n => {
-    if (!isShown(n)) return;
+    if (!n.visible) return;
     const d = Math.hypot(n.x - w.x, n.y - w.y);
-    const hit = radius(n) + 8 / cam.z;
+    const hit = Math.max(radius(n) * (n.type === 'netiana' ? 3 : 2), 11 / cam.z);
     if (d < hit && d < bd) { best = n; bd = d; }
   });
   return best;
@@ -457,6 +825,7 @@ function nodeAt(sx, sy) {
 
 function bindPointer(el) {
   el.addEventListener('pointerdown', e => {
+    ultimoToque = millis(); llamado = null;
     el.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
@@ -485,6 +854,7 @@ function bindPointer(el) {
       if (dragging) {
         const w = toWorld(e.clientX, e.clientY);
         dragging.x = w.x; dragging.y = w.y; dragging.vx = dragging.vy = 0;
+        el.style.cursor = 'grabbing';
         calor = Math.max(calor, 0.3);
       } else if (panning) {
         cam.x = downAt.cx - (e.clientX - downAt.x) / cam.z;
@@ -495,7 +865,7 @@ function bindPointer(el) {
     if (e.pointerType === 'mouse') {
       const n = nodeAt(e.clientX, e.clientY);
       hover = n;
-      el.style.cursor = n ? 'pointer' : 'crosshair';
+      el.style.cursor = n ? 'grab' : 'crosshair';
       showTooltip(n, e.clientX, e.clientY);
     }
   });
@@ -506,14 +876,22 @@ function bindPointer(el) {
     if (downAt && moved < 6) {
       const n = nodeAt(e.clientX, e.clientY);
       if (n) elegir(n);
+    } else if (dragging && moved >= 6) {
+      dragging.fijo = true;
     }
     dragging = null; panning = false; downAt = null;
   };
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
+  // doble clic sobre un nodo acomodado: lo suelta y vuelve a flotar
+  el.addEventListener('dblclick', e => {
+    const n = nodeAt(e.clientX, e.clientY);
+    if (n && n.fijo) { n.fijo = false; calor = Math.max(calor, 0.4); }
+  });
   el.addEventListener('pointerleave', () => { if (!downAt) { hover = null; showTooltip(null); } });
 
   el.addEventListener('wheel', e => {
+    ultimoToque = millis();
     e.preventDefault();
     const before = toWorld(e.clientX, e.clientY);
     cam.z = Math.min(4, Math.max(0.2, cam.z * Math.exp(-e.deltaY * 0.0015)));
@@ -527,10 +905,8 @@ function showTooltip(n, x, y) {
   const tt = document.getElementById('tooltip');
   if (!n) { tt.hidden = true; return; }
   const h = hiddenCount(n);
-  let s = `<span style="color:${TIPOS[n.type].color}">${TIPOS[n.type].nombre}</span> · ${n.label}`;
+  let s = `<span style="color:${TIPOS[n.type].color}">${esc(n.label)}</span>`;
   if (n.type === 'netiana') s = `<span style="color:${COL.green}">(${n.letra})</span> ${n.label} · ${n.data.n}`;
-  if (h) s += `<br><span style="color:${COL.mag}">+${h} por descubrir</span>`;
-  if (n.grupos.length) s += `<br><span style="color:${COL.gd}">${n.grupos.join(' · ')}</span>`;
   tt.innerHTML = s;
   tt.hidden = false;
   tt.style.left = Math.min(x + 14, window.innerWidth - 270) + 'px';
@@ -540,10 +916,16 @@ function showTooltip(n, x, y) {
 /* ── SELECCIÓN: navegar es devenir ───────────── */
 function elegir(n) {
   if (!n.visible) reveal(n, selected || { x: cam.x, y: cam.y });
-  // un concepto apagado por filtro se vuelve a encender si lo elegís
-  if (n.type !== 'netiana' && !filtros[n.type]) toggleFiltro(n.type, true);
   selected = n;
+  n.visitas++;
+  if (recorrido[recorrido.length - 1] !== n) recorrido.push(n);
+  if (recorrido.length > 40) recorrido.shift();
   revealNeighbors(n);
+  constel = armarConstelacion(n);
+  if (constel) constel.miembros.forEach(m => reveal(m, n));
+  calor = 1;
+  glitchear(14);
+  onda(n);
   openPanel(n);
   focusOn(n);
 }
@@ -569,7 +951,6 @@ function openPanel(n) {
   if (n.type === 'netiana') {
     const d = n.data;
     path.innerHTML = `netianas.net / <span>(${n.letra}) ${esc(d.a.toLowerCase())}</span>`;
-    // conexiones con otras netianas por conceptos compartidos
     const shared = {};
     nbrsOfType(n, 'concepto').forEach(t => nbrsOfType(t, 'netiana').forEach(o => {
       if (o !== n) (shared[o.id] = shared[o.id] || []).push(t.label);
@@ -581,11 +962,11 @@ function openPanel(n) {
       <div class="p-desc">${d.d}</div>
       <div class="p-sep"></div>
       <div class="p-body">${d.b}</div>
-      <div class="p-sec">// CONCEPTOS · ${d.t.length}</div>
+      <div class="p-sec">//</div>
       <div class="p-tags">${nbrsOfType(n, 'concepto').map(t => btnNode(t, '', '#' + esc(t.label))).join('')}</div>
-      <div class="p-sec">// REFERENTES · ${nbrsOfType(n, 'referente').length}</div>
+      <div class="p-sec">//</div>
       <div class="p-list">${nbrsOfType(n, 'referente').map(itemRef).join('')}</div>
-      <div class="p-sec">// SE CRUZA CON</div>
+      <div class="p-sec">//</div>
       <div class="p-list">${conns.map(([id, ts]) => {
         const o = byId[id];
         return `<button class="p-item n" data-node="${esc(id)}"><span class="l">${o.letra}</span><div><div class="t">${esc(o.label)}</div><div class="s">vía ${esc(ts.slice(0, 3).join(', '))}${ts.length > 3 ? '…' : ''}</div></div></button>`;
@@ -593,12 +974,12 @@ function openPanel(n) {
   }
 
   if (n.type === 'concepto') {
-    const nets = nbrsOfType(n, 'netiana');
-    path.innerHTML = `netianas.net / conceptos / <span>#${esc(n.label)}</span>`;
-    h = `<div class="p-kind">concepto</div>
-      <div class="p-name" style="color:${COL.mag}">#${esc(n.label)}</div>
-      <div class="p-desc">${nets.length} netiana${nets.length !== 1 ? 's' : ''} atravesada${nets.length !== 1 ? 's' : ''} por este concepto.</div>
-      ${n.grupos.length ? `<div class="p-meta">grupo: ${esc(n.grupos.join(' · '))}</div>` : ''}
+    const teo = teoriaDe(n);
+    const nets = constel ? constel.miembros.filter(m => m.type === 'netiana') : nbrsOfType(n, 'netiana');
+    const otros = constel ? constel.miembros.filter(m => m.type === 'concepto' && m !== n) : [];
+    path.innerHTML = `netianas.net / <span>#${esc(n.label)}</span>`;
+    h = `      <div class="p-name" style="color:${constel ? constel.color : COL.mag}">#${esc(n.label)}</div>
+      ${otros.length ? `<div class="p-tags" style="margin-bottom:.8rem">${otros.map(t => btnNode(t, '', '#' + esc(t.label))).join('')}</div>` : ''}
       <div class="p-list">${nets.map(itemNet).join('')}</div>`;
   }
 
@@ -606,24 +987,21 @@ function openPanel(n) {
     const r = n.ref;
     const nets = nbrsOfType(n, 'netiana');
     const cats = nbrsOfType(n, 'categoria');
-    path.innerHTML = `netianas.net / referentes / <span>${esc(n.label.toLowerCase())}</span>`;
-    h = `<div class="p-kind">referente</div>
-      <div class="p-name" style="color:${COL.cyan}">${esc(r.title)}</div>
+    path.innerHTML = `netianas.net / <span>${esc(n.label.toLowerCase())}</span>`;
+    h = `      <div class="p-name" style="color:${COL.cyan}">${esc(r.title)}</div>
       <div class="p-meta">${esc([n.pais, n.anio].filter(Boolean).join(' · '))}</div>
       ${r.img ? `<img class="p-img" src="${IMG_BASE + r.img}" alt="${esc(r.title)}" loading="lazy" onerror="this.remove()">` : ''}
       <div class="p-body">${r.body}</div>
-      <div class="p-sec">// CATEGORÍAS</div>
+      <div class="p-sec">//</div>
       <div class="p-tags">${cats.map(c => btnNode(c, 'cat', '(' + esc(c.label) + ')')).join('')}</div>
-      <div class="p-sec">// ENCARNA ${nets.length > 1 ? 'A LAS NETIANAS' : 'A LA NETIANA'}</div>
+      <div class="p-sec">//</div>
       <div class="p-list">${nets.map(itemNet).join('')}</div>`;
   }
 
   if (n.type === 'categoria') {
     const refs = nbrsOfType(n, 'referente');
-    path.innerHTML = `netianas.net / categorías / <span>(${esc(n.label)})</span>`;
-    h = `<div class="p-kind">categoría</div>
-      <div class="p-name">(${esc(n.label)})</div>
-      <div class="p-desc">${refs.length} referente${refs.length !== 1 ? 's' : ''} con esta etiqueta.</div>
+    path.innerHTML = `netianas.net / <span>(${esc(n.label)})</span>`;
+    h = `      <div class="p-name" style="color:${constel ? constel.color : COL.white}">(${esc(n.label)})</div>
       <div class="p-list">${refs.map(itemRef).join('')}</div>`;
   }
 
@@ -637,31 +1015,11 @@ function closePanel() {
   document.getElementById('panel').hidden = true;
   document.body.classList.remove('panel-open');
   selected = null;
+  constel = null;
 }
 
-/* ── HUD ─────────────────────────────────────── */
-function buildHud() {
-  const g = document.getElementById('grupos');
-  g.innerHTML = Object.entries(GRUPOS).map(([k, v]) =>
-    `<button class="chip${k === 'ninguna' ? ' on' : ''}" data-grupo="${k}">${v.nombre}</button>`).join('');
-  g.addEventListener('click', e => {
-    const b = e.target.closest('[data-grupo]'); if (!b) return;
-    g.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === b));
-    asignarGrupos(b.dataset.grupo);
-    setTimeout(() => fit(false), 1800);
-  });
-
-  document.querySelectorAll('[data-filtro]').forEach(b =>
-    b.addEventListener('click', () => toggleFiltro(b.dataset.filtro)));
-
-  document.getElementById('hud-toggle').addEventListener('click', () => {
-    const h = document.getElementById('hud');
-    const open = h.classList.toggle('open');
-    document.getElementById('hud-toggle').setAttribute('aria-expanded', open);
-  });
-  document.getElementById('btn-todo').addEventListener('click', desplegarTodo);
-  document.getElementById('btn-reset').addEventListener('click', resetGraph);
-  document.getElementById('btn-centrar').addEventListener('click', () => fit(false));
+/* ── INTERFAZ MÍNIMA ─────────────────────────── */
+function bindUi() {
   document.getElementById('pn-close').addEventListener('click', closePanel);
   document.getElementById('pn-body').addEventListener('click', e => {
     const b = e.target.closest('[data-node]');
@@ -670,30 +1028,15 @@ function buildHud() {
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 }
 
-function toggleFiltro(tipo, force) {
-  filtros[tipo] = force === undefined ? !filtros[tipo] : force;
-  document.querySelector(`[data-filtro="${tipo}"]`).classList.toggle('on', filtros[tipo]);
-  calor = Math.max(calor, 0.6);
-}
-
 function desplegarTodo() {
-  // se despliega por oleadas, como una red que crece
   let ola = 0;
   const tick = () => {
     const frontera = NODES.filter(n => n.visible && hiddenCount(n) > 0);
     if (!frontera.length || ola > 6) { setTimeout(() => fit(false), 600); return; }
     frontera.forEach(n => n.nbr.forEach(m => reveal(m, n)));
+    glitchear(10);
     calor = 1; ola++;
     setTimeout(tick, 450);
   };
   tick();
-}
-
-let lastCount = -1;
-function updateContador(c) {
-  if (c === lastCount) return;
-  lastCount = c;
-  const total = NODES.filter(n => n.type === 'netiana' || filtros[n.type]).length;
-  document.getElementById('contador').innerHTML =
-    `nodos descubiertos <b>${c}</b> / ${total}${c >= total ? ' · <span style="color:#ff00ff">el rizoma nunca se cierra: proponé el tuyo</span>' : ''}`;
 }

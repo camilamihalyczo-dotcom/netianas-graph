@@ -123,7 +123,7 @@ const REFS = {
       sub:["República Dominicana/México","(latinoamericana)","(investigadora)","(net.art)"],
       body:"Sitio web personal concebido como obra en sí misma: una interfaz de archivo digital que investiga la invisibilidad de las mujeres caribeñas y latinoamericanas en los sistemas de indexación de internet." },
     { img:"b-5-skinonskinonskin.webp", title:"skinonskinonskin — Auriea Harvey",
-      sub:["USA","(anglosajona)","(artista)","(net.art)","(ref. vista en clase)","1999"],
+      sub:["USA","(anglosajona)","(artista)","(net.art)","(genealogía net.art)","1999"],
       body:"Serie de cartas de amor digitales intercambiadas con Michaël Samyn. Los dos se conocieron en hell.com y comenzaron un romance intercambiando páginas web interactivas en Flash, audio e imágenes. Intimidad que se convierte en obra: la pantalla como jardín secreto compartido." },
     { img:"b-6-out4pizza.webp", title:"out_4_pizza — Laura Brothers",
       sub:["USA","(anglosajona)","(artista)","(net.art)","2007–"],
@@ -160,21 +160,21 @@ const REFS = {
       sub:["Uganda","(africana)","(artista)"],
       body:"Serie de pinturas digitales que retrata a mujeres negras africanas en atmósferas oníricas y tranquilas desde la intimidad doméstica. Al observarlas de cerca emergen mensajes directos que desafían las perspectivas patriarcales sobre la fragilidad asignada a las mujeres desde adentro de sus propios espacios cotidianos." },
     { img:"d-5-scandalishious.webp", title:"Scandalishious — Ann Hirsch",
-      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(ref. vista en clase)","2008–2009"],
+      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(genealogía net.art)","2008–2009"],
       body:"Performance de 18 meses en YouTube centrada en Caroline, un personaje inventado por Hirsch. El canal alcanzó más de un millón de vistas. Artista y obra se fusionan: la máscara doméstica del yo-para-la-cámara revela las violencias del sistema desde adentro." },
     { img:"d-6-skinonskinonskin.webp", title:"skinonskinonskin — Auriea Harvey",
-      sub:["USA","(anglosajona)","(artista)","(net.art)","(ref. vista en clase)","1999"],
+      sub:["USA","(anglosajona)","(artista)","(net.art)","(genealogía net.art)","1999"],
       body:"Cartas de amor digitales convertidas en obra pública. La intimidad doméstica — el cuarto, la pantalla, el cuerpo — se ofrece a la mirada del otro. Primera experiencia de net art de pago por visión: 10 euros para asomarse a una vida privada." },
     { img:"d-7-marisaolson.webp", title:"Marisa's American Idol Blog — Marisa Olson",
-      sub:["USA","(anglosajona)","(artista)","(escritora)","(net.art)","(ref. vista en clase)","2004–2005"],
+      sub:["USA","(anglosajona)","(artista)","(escritora)","(net.art)","(genealogía net.art)","2004–2005"],
       body:"Blog-diario de entrenamiento para audicionar en American Idol. Lo doméstico — el entrenamiento, la ropa, el cuerpo que se prepara — como espacio crítico y político. Olson acuñó el término 'postinternet art' en 2006." }
   ],
   4: [ // E · Esteganógrafa
     { img:"e-1-olia.webp", title:"Olia Lialina",
-      sub:["Rusia","(europea)","(artista)","(investigadora)","(citada por Zafra)","(ref. vista en clase)","(net.art)"],
+      sub:["Rusia","(europea)","(artista)","(investigadora)","(citada por Zafra)","(genealogía net.art)","(net.art)"],
       body:"My Boyfriend Came Back from the War (1996): narrativa oculta en la estructura del HTML, lo que no se dice visible en el código." },
     { img:"e-2-eva.webp", title:"0100101110101101.ORG",
-      sub:["Eva y Franco Mattes, Italia","(europea)","(artista)","(colectivo)","(ref. vista en clase)","(net.art)"],
+      sub:["Eva y Franco Mattes, Italia","(europea)","(artista)","(colectivo)","(genealogía net.art)","(net.art)"],
       body:"Hackeo de identidades corporativas, arte que se esconde dentro del sistema." },
     { img:"e-3-tacticaltech.webp", title:"Tactical Tech / Gender & Tech",
       sub:["Internacional","(europea)","(colectivo)","(investigadora)"],
@@ -183,7 +183,7 @@ const REFS = {
       sub:["Afganistán/Australia","(anglosajona)","(activista)","(investigadora)"],
       body:"Plataforma digital creada para documentar y archivar incidentes de islamofobia contra mujeres en Australia. Opera desde la invisibilidad estratégica: registra lo que el sistema no quiere ver, guardando evidencia oculta de violencias cotidianas contra mujeres musulmanas en internet." },
     { img:"e-5-grobari.webp", title:"Grobari — Aleksandra Domanović",
-      sub:["Serbia","(europea)","(artista)","(investigadora)","(net.art)","(ref. vista en clase)","2009"],
+      sub:["Serbia","(europea)","(artista)","(investigadora)","(net.art)","(genealogía net.art)","2009"],
       body:"PDFs de miles de páginas que conmemoran el dominio .yu, extinto, de la República Socialista Federativa de Yugoslavia. El dominio sobrevivió largamente a la nación que lo nombró, expirando en 2010. La información política oculta en la forma burocrática del archivo." }
   ],
   5: [ // F · Flâneuse
@@ -223,7 +223,7 @@ const REFS = {
       sub:["Brasil","(latinoamericana)","(colectivo)"],
       body:"Produce material de licencia abierta de defensa digital para proyectos feministas, al mismo tiempo que ofrece soporte técnico y talleres sobre infraestructuras libres feministas." },
     { img:"g-7-petracortright.webp", title:"VVEBCAM — Petra Cortright",
-      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(ref. vista en clase)","2007"],
+      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(genealogía net.art)","2007"],
       body:"Video de YouTube donde Cortright mira fijamente a la webcam mientras figuras de clip art flotan alrededor de su cara. Usó etiquetas de spam para atraer tráfico, subvirtiendo el algoritmo de YouTube como material artístico. La geek que usa el sistema contra sí mismo." }
   ],
   7: [ // H · Hacktivista
@@ -260,10 +260,10 @@ const REFS = {
       sub:["Global","(colectivo)","(manifiesto)"],
       body:"Conjunto de principios redactados colectivamente en Malaysia por 50 activistas de derechos sexuales y digitales de África, Asia y América Latina. Un manifiesto que existe como red distribuida sin centro." },
     { img:"i-5-scandalishious.webp", title:"Scandalishious — Ann Hirsch",
-      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(ref. vista en clase)","2008–2009"],
+      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(genealogía net.art)","2008–2009"],
       body:"Performance de 18 meses en YouTube: Caroline acumula presencia fragmento a fragmento, construyendo identidad en la acumulación de lo menor. La invisible que existe solo porque la cámara la ve." },
     { img:"i-6-petracortright.webp", title:"VVEBCAM — Petra Cortright",
-      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(ref. vista en clase)","2007"],
+      sub:["USA","(anglosajona)","(artista)","(video)","(net.art)","(genealogía net.art)","2007"],
       body:"Mira fijamente a la webcam sin interpelar al espectador. Su vigilancia pasiva de la pantalla es espejada por quien la mira: presencia sin presencia, visibilidad sin cuerpo." }
   ],
   9: [ // J · Jinetera
@@ -297,7 +297,7 @@ const REFS = {
       sub:["India","(asiática)","(artista)"],
       body:"Reimagina diosas de distintas culturas del mundo como mujeres feministas contemporáneas con cuerpos vibrantes y género ambivalente. Arte como citación y resignificación cultural." },
     { img:"k-6-marisaolson.webp", title:"Marisa's American Idol Blog — Marisa Olson",
-      sub:["USA","(anglosajona)","(artista)","(escritora)","(net.art)","(ref. vista en clase)","2004–2005"],
+      sub:["USA","(anglosajona)","(artista)","(escritora)","(net.art)","(genealogía net.art)","2004–2005"],
       body:"Performance en la que la artista se embarcó en un año de entrenamiento para audicionar en American Idol, documentando el proceso en un blog. Reproduce el formato para desactivarlo desde adentro: citar la cultura pop para criticarla. Olson acuñó el término 'postinternet art' en 2006." }
   ],
   11: [ // L · Lurker
@@ -305,7 +305,7 @@ const REFS = {
       sub:["Argentina","(latinoamericana)","(escritora)","(investigadora)","(net.art)"],
       body:"Escritura digital y poesía electrónica: Wordtoys — obra de etcéteras, listas que no se cierran nunca." },
     { img:"l-2-vns.webp", title:"VNS Matrix",
-      sub:["Australia","(anglosajona)","(colectivo)","(artista)","(citada por Zafra)","(ref. vista en clase)","(manifiesto)","(net.art)"],
+      sub:["Australia","(anglosajona)","(colectivo)","(artista)","(citada por Zafra)","(genealogía net.art)","(manifiesto)","(net.art)"],
       body:"Cyberfeminist Manifesto: vagabundeo irónico por el ciberespacio, rechazo a todo mapa fijo. Fundadoras del ciberfeminismo como práctica artística." },
     { img:"l-3-feministafrica.webp", title:"Feminist Africa",
       sub:["África continental","(africana)","(investigadora)"],
@@ -360,7 +360,7 @@ const REFS = {
       sub:["Argentina/España","(latinoamericana)","(europea)","(artista)","(net.art)","(video)","(performance)"],
       body:"Performance en Instagram donde encarnó durante meses tres personajes ficticios completamente distintos. La identidad como rol que se adopta, se habita y se abandona." },
     { img:"n-6-grobari.webp", title:"Grobari — Aleksandra Domanović",
-      sub:["Serbia","(europea)","(artista)","(investigadora)","(net.art)","(ref. vista en clase)","2009"],
+      sub:["Serbia","(europea)","(artista)","(investigadora)","(net.art)","(genealogía net.art)","2009"],
       body:"PDFs de miles de páginas que conmemoran el dominio .yu, ahora extinto, de la República Socialista Federativa de Yugoslavia. El dominio sobrevivió largamente a la nación que lo nombró, expirando en 2010. Identidad digital que migra, se archiva y desaparece." }
   ],
 };
