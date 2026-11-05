@@ -6,6 +6,7 @@
 ══════════════════════════════════════ */
 
 const IMG_BASE = 'https://netianas.vercel.app/img/';
+const FORM_URL = 'https://netianas.vercel.app/form_sugerencias.html';
 
 const COL = {
   bg: '#050505', green: '#00ff41', gd: '#00aa2a', gf: '#001a00',
@@ -14,6 +15,8 @@ const COL = {
 
 const TIPOS = {
   netiana:   { color: COL.green, nombre: 'netiana' },
+  proponer:  { color: COL.mag,   nombre: 'tu netiana' },
+  palabra:   { color: COL.white, nombre: '' },
   concepto:  { color: COL.mag,   nombre: 'concepto' },
   referente: { color: COL.cyan,  nombre: 'referente' },
   categoria: { color: COL.white, nombre: 'categoría' }
@@ -79,7 +82,31 @@ Object.entries(REFS).forEach(([ni, refs]) => {
   });
 });
 
-NODES.forEach(n => n.deg = n.nbr.size);
+// [+] la netiana que falta: quien navega puede proponer una nueva
+const PROPONER = addNode('p:+', 'proponer', { letra: '+', label: 'tu netiana' });
+const grande = n => n.type === 'netiana' || n.type === 'proponer';
+
+/* ── PALABRAS SUELTAS: fragmentos del texto flotan en el rizoma ──
+   La categoría de Zafra de cada netiana está a la vista desde el inicio;
+   las frases cortas de su texto aparecen al tocarla. */
+const limpiar = h => h.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+NODES.filter(n => n.type === 'netiana').forEach(n => {
+  const cat = addNode('w:' + n.idx + ':cat', 'palabra', { label: n.data.n.replace(/[«»]/g, ''), net: n, inicial: true });
+  link(n, cat);
+  const frases = (limpiar(n.data.d) + ' ' + limpiar(n.data.b))
+    .split(/(?<=[.?!])\s+/)
+    .map(f => f.trim().replace(/\.$/, ''))
+    .filter(f => f.length >= 10 && f.length <= 46);
+  // sin repetidas: se descarta una frase si empieza igual que otra ya elegida
+  const elegidas = [];
+  frases.forEach(f => { if (!elegidas.some(e => e.slice(0, 18) === f.slice(0, 18))) elegidas.push(f); });
+  elegidas.slice(0, 3).forEach((f, j) => link(n, addNode('w:' + n.idx + ':' + j, 'palabra', { label: f, net: n })));
+});
+// la pregunta del libro, suelta, sin netiana
+['¿qué es una mujer en internet?', 'depende'].forEach((f, j) =>
+  addNode('w:libre:' + j, 'palabra', { label: f, inicial: true }));
+
+NODES.forEach(n => n.deg = Math.max(1, n.nbr.size));
 
 /* ── CONEXIONES LATERALES: más malla, menos árbol ── */
 (function tejerLaterales() {
@@ -97,6 +124,8 @@ NODES.forEach(n => n.deg = n.nbr.size);
       .sort((x, y) => y.c - x.c).slice(0, 2)
       .forEach(({ o, c }) => { if (c >= 2) lateral(r, o); });
   });
+  // la netiana que falta se enlaza, sin jerarquía, con tres netianas al azar
+  nets.slice().sort(() => Math.random() - .5).slice(0, 3).forEach(n => lateral(PROPONER, n));
   // conceptos que aparecen juntos en 3 netianas o más
   const cons = NODES.filter(n => n.type === 'concepto');
   for (let i = 0; i < cons.length; i++) for (let j = i + 1; j < cons.length; j++) {
@@ -207,11 +236,18 @@ function resetGraph() {
   const nf = 3 + Math.floor(Math.random() * 3);
   // los focos se reparten según la forma de la pantalla (ancha en compu, alta en celular)
   const ancho = window.innerWidth > 760;
-  focos = Array.from({ length: nf }, () => ({ x: (Math.random() - .5) * (ancho ? 2200 : 650), y: (Math.random() - .5) * (ancho ? 1400 : 1200) }));
-  NODES.filter(n => n.type === 'netiana').forEach(n => {
+  focos = Array.from({ length: nf }, () => ({ x: (Math.random() - .5) * (ancho ? 1500 : 520), y: (Math.random() - .5) * (ancho ? 950 : 900) }));
+  NODES.filter(grande).forEach(n => {
     n.visible = true; n.born = frameCount - 60;
     n.foco = focos[Math.floor(Math.random() * nf)];
     n.x = n.foco.x + (Math.random() - .5) * 160; n.y = n.foco.y + (Math.random() - .5) * 160;
+    n.vx = n.vy = 0;
+  });
+  NODES.filter(n => n.inicial).forEach(n => {
+    n.visible = true; n.born = frameCount + Math.floor(Math.random() * 120);
+    n.foco = n.net ? null : focos[Math.floor(Math.random() * focos.length)];
+    const o = n.net || n.foco;
+    n.x = o.x + (Math.random() - .5) * 220; n.y = o.y + (Math.random() - .5) * 220;
     n.vx = n.vy = 0;
   });
   recorrido.length = 0;
@@ -223,7 +259,7 @@ function resetGraph() {
 }
 
 /* ── FÍSICA ───────────────────────────────────── */
-const LARGO = { concepto: 70, referente: 95, categoria: 80 };
+const LARGO = { concepto: 70, referente: 95, categoria: 80, palabra: 115 };
 
 function step() {
   const vis = NODES.filter(n => n.visible);
@@ -237,7 +273,7 @@ function step() {
       let d2 = dx * dx + dy * dy;
       if (d2 < 1) { dx = Math.random() - .5; dy = Math.random() - .5; d2 = 1; }
       if (d2 > 160000) continue;
-      const f = (a.type === 'netiana' && b.type === 'netiana' ? 5200 : 1700) / d2;
+      const f = (grande(a) && grande(b) ? 5200 : 1700) / d2;
       const d = Math.sqrt(d2);
       const fx = dx / d * f, fy = dy / d * f;
       a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
@@ -324,15 +360,20 @@ const GLIFO = { netiana: null, concepto: '#', referente: null, categoria: '()' }
 
 // tamaño del glifo en unidades del mundo
 function glyphSize(n) {
-  if (n.type === 'netiana') return 22 + Math.sqrt(n.deg) * 1.2;
+  if (n.type === 'palabra') return 12;
+  if (grande(n)) return 32 + Math.sqrt(n.deg) * 1.4;
   if (n.type === 'referente') return 11 + Math.sqrt(n.deg) * 1.2;
   if (n.type === 'categoria') return 10 + Math.sqrt(n.deg) * 0.8;
   return 11 + Math.sqrt(n.deg) * 1.3;
 }
-function radius(n) { return glyphSize(n) * (n.type === 'netiana' ? 0.75 : 0.4); }
+function radius(n) {
+  if (n.type === 'palabra') return n.label.length * 3;
+  return glyphSize(n) * (grande(n) ? 0.75 : 0.4);
+}
 
 function glyphOf(n) {
-  if (n.type === 'netiana') return '[' + n.letra + ']';
+  if (n.type === 'palabra') return n.label;
+  if (grande(n)) return '[' + n.letra + ']';
   if (n.type === 'referente') {
     // los referentes son bits: cada tanto cambian de 0 a 1
     return noise(n.seed, frameCount * 0.01) > 0.5 ? '1' : '0';
@@ -682,13 +723,37 @@ function drawNodo() {
   text('> ' + constel.nombre + cursor, x0, y0 - 4 / cam.z);
 }
 
+function drawPalabra(n, fs) {
+  const age = frameCount - n.born;
+  if (age < 0) return;
+  const dim = fs && !fs.has(n);
+  // aparecen y desaparecen: cada palabra respira a su ritmo
+  const resp = noise(n.seed, frameCount * 0.008);
+  let a = n === hover ? 255 : (dim ? 30 : 40 + 200 * Math.max(0, resp - 0.3) / 0.7);
+  // se escriben letra por letra, como una terminal
+  let txt = n.label.slice(0, Math.floor(age / 2));
+  if (age < n.label.length * 2) txt += random(['_', '█', '▓']);
+  else if (Math.random() < 0.01) txt = txt.replace(/[a-záéíóú]/i, random(['%', '#', '0', '1']));
+  noStroke();
+  textFont('Share Tech Mono');
+  textSize(glyphSize(n) / Math.pow(cam.z, 0.35));
+  textAlign(CENTER, CENTER);
+  const col = color(n === hover ? COL.mag : COL.white);
+  if (!dim && resp > 0.75) { fill(255, 0, 255, a * 0.4); text(txt, n.x - 1.5, n.y); }
+  col.setAlpha(a);
+  fill(col);
+  text(txt, n.x, n.y);
+  textFont('VT323');
+}
+
 function drawGlyph(n, fs) {
+  if (n.type === 'palabra') return drawPalabra(n, fs);
   const age = frameCount - n.born;
   const dim = fs && !fs.has(n);
   const hid = hiddenCount(n);
   const lat = n.pulso || 0;
   // en reposo, las netianas palpitan: la red está viva y se puede tocar
-  const palp = n.type === 'netiana' && enReposo() ? 0.08 * palpito() : 0;
+  const palp = grande(n) && enReposo() ? 0.08 * palpito() : 0;
   const sz = glyphSize(n) * (n === hover ? 1.2 : 1) * (1 + 0.45 * lat + palp);
   const g = glyphOf(n);
   const base = color(TIPOS[n.type].color);
@@ -716,19 +781,19 @@ function drawGlyph(n, fs) {
     fill(COL.bg); text(txt, 0, -sz * 0.06);
   } else {
     // aberración cromática: canal magenta y cian desplazados
-    if (!dim && (age < 26 || n === hover || n.type === 'netiana')) {
+    if (!dim && (age < 26 || n === hover || grande(n))) {
       const off = (age < 26 ? 3 : 1) * (0.6 + Math.random() * 0.6);
       fill(255, 0, 255, a * 0.55); text(txt, gx - off, gy - sz * 0.06);
       fill(0, 255, 255, a * 0.45); text(txt, gx + off, gy - sz * 0.06);
     }
     base.setAlpha(a);
-    if ((n.type === 'netiana' || lat > 0.2) && !dim) { drawingContext.shadowBlur = 10 + 18 * lat; drawingContext.shadowColor = TIPOS[n.type].color; }
+    if ((grande(n) || lat > 0.2) && !dim) { drawingContext.shadowBlur = 10 + 18 * lat; drawingContext.shadowColor = TIPOS[n.type].color; }
     fill(base); text(txt, gx, gy - sz * 0.06);
     drawingContext.shadowBlur = 0;
   }
 
   // cursor parpadeante: este nodo todavía tiene conexiones por descubrir
-  if (hid > 0 && !dim && n !== selected && frameCount % 50 < 25 + (n.seed % 10)) {
+  if ((hid > 0 || n.type === 'proponer') && !dim && n !== selected && frameCount % 50 < 25 + (n.seed % 10)) {
     const c2 = color(n.type === 'netiana' ? COL.mag : TIPOS[n.type].color);
     c2.setAlpha(200);
     fill(c2);
@@ -749,22 +814,23 @@ function drawGlyph(n, fs) {
 }
 
 function drawLabel(n, fs) {
+  if (n.type === 'palabra') return;
   const age = frameCount - n.born;
   const focused = fs && fs.has(n);
   const dim = fs && !focused;
-  const show = n.type === 'netiana' || focused || age < 90 ||
+  const show = grande(n) || focused || age < 90 ||
     (n.type === 'referente' && cam.z > 1.4) ||
     (n.type !== 'referente' && cam.z > 1.1);
   if (!show) return;
 
   let a = 220;
   if (dim) a = 45;
-  else if (!focused && n.type !== 'netiana' && age < 90 && cam.z <= 1.1) a = 220 * (1 - age / 90);
+  else if (!focused && !grande(n) && age < 90 && cam.z <= 1.1) a = 220 * (1 - age / 90);
 
   noStroke();
-  if (n.type === 'netiana') {
+  if (grande(n)) {
     textFont('Share Tech Mono');
-    textSize(10.5 / Math.pow(cam.z, 0.6));
+    textSize(13 / Math.pow(cam.z, 0.6));
     textAlign(CENTER, TOP);
     const cw = color(COL.white); cw.setAlpha(a * 0.9); fill(cw);
     text(n.label.toLowerCase(), n.x, n.y + glyphSize(n) * 0.5);
@@ -817,7 +883,7 @@ function nodeAt(sx, sy) {
   NODES.forEach(n => {
     if (!n.visible) return;
     const d = Math.hypot(n.x - w.x, n.y - w.y);
-    const hit = Math.max(radius(n) * (n.type === 'netiana' ? 3 : 2), 11 / cam.z);
+    const hit = Math.max(radius(n) * (grande(n) ? 3 : 2), 11 / cam.z);
     if (d < hit && d < bd) { best = n; bd = d; }
   });
   return best;
@@ -915,6 +981,12 @@ function showTooltip(n, x, y) {
 
 /* ── SELECCIÓN: navegar es devenir ───────────── */
 function elegir(n) {
+  // una palabra lleva a su netiana; las palabras sueltas, a cualquiera
+  if (n.type === 'palabra') {
+    onda(n);
+    const nets = NODES.filter(m => m.type === 'netiana');
+    n = n.net || nets[Math.floor(Math.random() * nets.length)];
+  }
   if (!n.visible) reveal(n, selected || { x: cam.x, y: cam.y });
   selected = n;
   n.visitas++;
@@ -1004,6 +1076,13 @@ function openPanel(n) {
     h = `      <div class="p-name" style="color:${constel ? constel.color : COL.white}">(${esc(n.label)})</div>
       <div class="p-list">${refs.map(itemRef).join('')}</div>`;
   }
+
+  // la netiana que falta: el formulario de sugerencias se abre acá, sin salir de la obra
+  if (n.type === 'proponer') {
+    path.innerHTML = `netianas.net / <span>tu netiana</span>`;
+    h = `<iframe class="p-form" src="${FORM_URL}" title="Proponé una netiana" loading="lazy"></iframe>`;
+  }
+  p.classList.toggle('con-form', n.type === 'proponer');
 
   body.innerHTML = h;
   body.scrollTop = 0;
