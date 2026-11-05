@@ -187,7 +187,9 @@ body::after {
 
 /* formulario de sugerencias dentro del panel */
 #panel.con-form { width: min(560px, 100vw); }
-#panel.con-form #pn-body { padding: 0; overflow: hidden; }
+#panel.con-form #pn-body { padding: 0; overflow: hidden; display: flow-root; position: relative; }
+/* la barra de arriba (con la ✕) siempre queda por encima del formulario */
+.pn-head { position: relative; z-index: 2; background: rgba(5,5,5,.98); }
 /* el formulario sube 58px dentro del panel: su "← volver al rizoma" queda fuera de la vista */
 .p-form {
   width: 100%; height: calc(100% + 58px);

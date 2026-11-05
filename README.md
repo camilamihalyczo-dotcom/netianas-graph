@@ -2,7 +2,7 @@
 
 Obra de net.art basada en *Netianas* (2005) de Remedios Zafra: una red rizomática navegable, con estética de JODI y VNS Matrix. Hecha con **p5.js**, física propia y sonido generado con Web Audio.
 
-Sin centro, sin origen, sin orden correcto de lectura: al entrar flotan las 14 netianas, la netiana que falta `[+]` y palabras sueltas del texto. La red crece a medida que se navega.
+Sin centro, sin origen, sin orden correcto de lectura. Se entra como a internet en los 90: una pantalla negra con un cursor `_`; al tocar suena un módem y la red nace con su sonido. Flotan las 14 netianas, la netiana que falta `[+]` y palabras sueltas del texto. La red crece a medida que se navega.
 
 ## Cómo se navega
 
@@ -14,7 +14,7 @@ Sin centro, sin origen, sin orden correcto de lectura: al entrar flotan las 14 n
 - El **cursor `_`** al lado de un nodo indica que tiene conexiones por descubrir.
 - **Arrastrar un nodo** lo deja fijo donde se suelta (doble clic lo libera). Arrastrar el fondo mueve la vista; rueda o pellizco, zoom. `Esc` cierra el panel.
 - Cuando nadie toca la red, un **latido** con forma de electrocardiograma la recorre y termina en una netiana que pide ser tocada.
-- **Sonido:** arranca con el primer toque y no se silencia.
+- **Sonido:** arranca con el toque que conecta y no se silencia (los navegadores no permiten sonido antes de un toque: por eso la obra empieza dormida).
 
 ## Archivos
 
