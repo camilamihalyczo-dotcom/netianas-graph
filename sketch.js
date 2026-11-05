@@ -54,10 +54,11 @@ const claveDe = (a, b) => a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id;
 // conexión lateral: no es jerárquica ni sirve para descubrir, solo une lo que se parece
 function lateral(a, b) {
   const k = claveDe(a, b);
-  if (edgeMap[k]) return;
+  if (edgeMap[k]) return edgeMap[k].lateral ? edgeMap[k] : null;
   const e = { a, b, seed: Math.random() * 1000, lateral: true };
   LATERALES.push(e);
   edgeMap[k] = e;
+  return e;
 }
 const tagOf = s => { const m = s.match(/^\((.+)\)$/); return m ? m[1] : null; };
 
@@ -106,6 +107,28 @@ NODES.filter(n => n.type === 'netiana').forEach(n => {
 ['¿qué es una mujer en internet?', 'depende'].forEach((f, j) =>
   addNode('w:libre:' + j, 'palabra', { label: f, inicial: true }));
 
+// las palabras también se enlazan entre sí: por las palabras que comparten
+// y, si no comparten ninguna, con otra al azar. El texto es otra capa del rizoma.
+(function tejerPalabras() {
+  const vacias = new Set(['como', 'para', 'pero', 'desde', 'entre', 'sobre', 'sino', 'cuando', 'donde', 'esta', 'este', 'todo', 'toda', 'cada', 'puede', 'sola', 'solo', 'nunca', 'siempre', 'otra', 'otras', 'otro', 'ellas', 'mismo', 'misma']);
+  const ps = NODES.filter(n => n.type === 'palabra');
+  const clave = f => new Set(f.toLowerCase().replace(/[¿?¡!:;,.«»]/g, '').split(' ').filter(w => w.length > 4 && !vacias.has(w)));
+  ps.forEach(n => n.claves = clave(n.label));
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+    if (ps[i].net && ps[i].net === ps[j].net) continue;
+    if ([...ps[i].claves].some(w => ps[j].claves.has(w))) lateral(ps[i], ps[j]).palabras = true;
+  }
+  ps.forEach(n => {
+    const tiene = LATERALES.some(e => e.palabras && (e.a === n || e.b === n));
+    if (tiene) return;
+    const otras = ps.filter(m => m !== n && (!n.net || m.net !== n.net));
+    for (let k = 0; k < 2; k++) {
+      const e = lateral(n, otras[Math.floor(Math.random() * otras.length)]);
+      if (e) e.palabras = true;
+    }
+  });
+})();
+
 NODES.forEach(n => n.deg = Math.max(1, n.nbr.size));
 
 /* ── CONEXIONES LATERALES: más malla, menos árbol ── */
@@ -153,7 +176,7 @@ function puntoCurva(c, t) {
 // crecimiento: la conexión brota desde el nodo que ya estaba
 function crecimiento(e) {
   const nace = Math.max(e.a.born, e.b.born);
-  return easeOut(Math.min(1, (frameCount - nace) / 45));
+  return easeOut(Math.max(0, Math.min(1, (frameCount - nace) / 45)));
 }
 const nbrsOfType = (n, type) => [...n.nbr].filter(m => m.type === type);
 
@@ -437,9 +460,9 @@ function actualizarPaquetes() {
     if (p.t >= 1) {
       paquetes.splice(i, 1);
       p.b.pulso = Math.max(p.b.pulso || 0, p.salto < 9 ? 1 : 0.6);
+      Sonido.dato(p.salto < 9);
       // la onda sigue un salto más, más débil
       if (p.salto === 0) {
-        ondas.push({ x: p.b.x, y: p.b.y, t: 0.35, col: p.col });
         [...p.b.nbr].filter(m => m.visible && m !== p.a).slice(0, 4).forEach(m => enviar(p.b, m, 1, true));
       }
     }
@@ -519,7 +542,7 @@ function actualizarLatido() {
   if (latido.p >= 1) {
     const llega = latido.path[latido.i + 1];
     llega.pulso = 1;
-    ondas.push({ x: llega.x, y: llega.y, t: 0.45, col: COL.mag });
+    Sonido.latido();
     latido.i++; latido.p = 0;
     if (latido.i >= latido.path.length - 1) {
       llamado = { n: llega, hasta: frameCount + 150 };
@@ -586,7 +609,7 @@ function drawOndas() {
     if (o.t < 0.5) { c.setAlpha(120 * (1 - o.t * 2)); stroke(c); rect(o.x - r * 0.6, o.y - r * 0.6, r * 1.2, r * 1.2); }
   });
 }
-function glitchear(f) { rafaga = Math.max(rafaga, f); }
+function glitchear(f) { rafaga = Math.max(rafaga, f); Sonido.glitch(1); }
 
 function setup() {
   const cnv = createCanvas(window.innerWidth, window.innerHeight);
@@ -638,13 +661,16 @@ function drawEdges(fs) {
     const other = e.a.type === 'netiana' ? e.b : e.a;
     const col = color(lit ? TIPOS[other.type].color : (e.lateral ? COL.white : COL.green));
     const ruido = noise(e.seed, frameCount * 0.03);
-    const base = e.lateral ? 26 : 58;
+    const base = e.palabras ? 70 : (e.lateral ? 26 : 58);
     col.setAlpha(lit ? 170 : (fs ? 10 : (ruido > 0.82 ? base * 2.6 : base)));
     stroke(col);
     strokeWeight((lit ? 1.1 : (e.lateral ? 0.45 : 0.7)) / Math.sqrt(cam.z));
 
     const c = curva(e);
     const g = crecimiento(e);
+    if (g <= 0) return;
+    // los hilos entre palabras son punteados, como texto que se cita
+    if (e.palabras) drawingContext.setLineDash([3 / cam.z, 4 / cam.z]);
     // brota desde el nodo que nació antes
     const desdeA = e.a.born <= e.b.born;
     const N = 16;
@@ -658,9 +684,10 @@ function drawEdges(fs) {
       vertex(x + (i === corte + 1 ? (Math.random() - .5) * 6 : 0), y);
     }
     endShape();
+    drawingContext.setLineDash([]);
 
     // ramificaciones: pelitos de raíz que salen de la conexión
-    if (g > 0.85 && !(fs && !lit)) {
+    if (g > 0.85 && !(fs && !lit) && !e.palabras) {
       const ramas = Math.floor(e.seed % 3);
       col.setAlpha((lit ? 120 : base * 0.9) * (g - 0.85) / 0.15);
       stroke(col);
@@ -732,7 +759,7 @@ function drawPalabra(n, fs) {
   let a = n === hover ? 255 : (dim ? 30 : 40 + 200 * Math.max(0, resp - 0.3) / 0.7);
   // se escriben letra por letra, como una terminal
   let txt = n.label.slice(0, Math.floor(age / 2));
-  if (age < n.label.length * 2) txt += random(['_', '█', '▓']);
+  if (age < n.label.length * 2) { txt += random(['_', '█', '▓']); if (age % 2 === 0) Sonido.tecla(); }
   else if (Math.random() < 0.01) txt = txt.replace(/[a-záéíóú]/i, random(['%', '#', '0', '1']));
   noStroke();
   textFont('Share Tech Mono');
@@ -851,6 +878,7 @@ function drawLabel(n, fs) {
 function postGlitch() {
   if (rafaga > 0) rafaga--;
   const intens = rafaga > 0 ? 1 : (Math.random() < 0.025 ? 0.35 : 0);
+  if (intens === 0.35) Sonido.glitch(0.3);
   if (!intens) return;
   const ctx = drawingContext, cv = ctx.canvas;
   const d = pixelDensity();
@@ -930,6 +958,7 @@ function bindPointer(el) {
     }
     if (e.pointerType === 'mouse') {
       const n = nodeAt(e.clientX, e.clientY);
+      if (n && n !== hover) Sonido.roce();
       hover = n;
       el.style.cursor = n ? 'grab' : 'crosshair';
       showTooltip(n, e.clientX, e.clientY);
@@ -944,6 +973,7 @@ function bindPointer(el) {
       if (n) elegir(n);
     } else if (dragging && moved >= 6) {
       dragging.fijo = true;
+      Sonido.anclar();
     }
     dragging = null; panning = false; downAt = null;
   };
@@ -952,7 +982,7 @@ function bindPointer(el) {
   // doble clic sobre un nodo acomodado: lo suelta y vuelve a flotar
   el.addEventListener('dblclick', e => {
     const n = nodeAt(e.clientX, e.clientY);
-    if (n && n.fijo) { n.fijo = false; calor = Math.max(calor, 0.4); }
+    if (n && n.fijo) { n.fijo = false; calor = Math.max(calor, 0.4); Sonido.soltar(); }
   });
   el.addEventListener('pointerleave', () => { if (!downAt) { hover = null; showTooltip(null); } });
 
@@ -981,6 +1011,7 @@ function showTooltip(n, x, y) {
 
 /* ── SELECCIÓN: navegar es devenir ───────────── */
 function elegir(n) {
+  Sonido.toque(n.type);
   // una palabra lleva a su netiana; las palabras sueltas, a cualquiera
   if (n.type === 'palabra') {
     onda(n);
